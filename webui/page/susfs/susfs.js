@@ -142,6 +142,7 @@ async function applyCustomFile(key) {
 const TOGGLE_ROWS = [
     { id: 'toggle-hide-mnts', key: 'HIDE_SUS_MNTS_NON_SU' },
     { id: 'toggle-hide-mnts-late', key: 'HIDE_SUS_MNTS_LATE' },
+    { id: 'toggle-allow-broad-umount', key: 'ALLOW_BROAD_KERNEL_UMOUNT' },
     { id: 'toggle-enable-log', key: 'ENABLE_LOG' },
     { id: 'toggle-avc-spoof', key: 'ENABLE_AVC_LOG_SPOOFING' },
 ];

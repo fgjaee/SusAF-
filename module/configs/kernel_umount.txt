@@ -2,4 +2,6 @@
 # A target must be a current mountpoint; invalid, missing, relative, traversal,
 # whitespace-containing, and overlong paths are rejected and recorded in
 # state/kernel_umount.report.txt. Legacy susfs4ksu try_umount.txt entries are
-# migrated here for review. Sus'AF never wipes entries owned by other modules.
+# migrated here for review. Whole-partition targets such as /system_ext are
+# preserved but skipped unless ALLOW_BROAD_KERNEL_UMOUNT=1. Sus'AF never wipes
+# entries owned by other modules.

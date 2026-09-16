@@ -68,6 +68,18 @@ kernel_umount_target_is_safe() {
 	return 0
 }
 
+kernel_umount_target_is_broad() {
+	local target="$1"
+
+	case "$target" in
+		/system|/system_ext|/vendor|/product|/odm|/apex|/debug_ramdisk|\
+		/data|/metadata|/mnt|/storage|/dev|/proc|/sys)
+			return 0
+			;;
+	esac
+	return 1
+}
+
 kernel_umount_target_is_mounted() {
 	local mountinfo_file="$1"
 	local target="$2"
@@ -194,17 +206,19 @@ apply_kernel_umount_mounts() {
 	local config_file="${1:-$PERSISTENT_DIR/config.txt}"
 	local list_file="${2:-$PERSISTENT_DIR/kernel_umount.txt}"
 	local mountinfo_file="${SUSAF_MOUNTINFO:-/proc/1/mountinfo}"
-	local mode auto check report_file candidate_file accepted_file registered_file
+	local mode auto allow_broad check report_file candidate_file accepted_file registered_file
 	local registered_next error_file ksu_bin target reason line add_error
-	local add_count existing_count inactive_count reject_count fail_count
+	local add_count existing_count inactive_count broad_count reject_count fail_count
 	umask 077
 
 	mode=$(get_conf KERNEL_UMOUNT_MODE enabled "$config_file")
 	auto=$(get_conf AUTO_KERNEL_UMOUNT 1 "$config_file")
+	allow_broad=$(get_conf ALLOW_BROAD_KERNEL_UMOUNT 0 "$config_file")
 	report_file="${SUSAF_KERNEL_UMOUNT_REPORT:-$PERSISTENT_DIR/state/kernel_umount.report.txt}"
 	kernel_umount_prepare_report "$report_file" || return 1
 	kernel_umount_report "mode=$mode"
 	kernel_umount_report "auto=$auto"
+	kernel_umount_report "allow_broad=$allow_broad"
 
 	case "$mode" in
 		unchanged|enabled) ;;
@@ -223,6 +237,14 @@ apply_kernel_umount_mounts() {
 		0|1) ;;
 		*)
 			kernel_umount_report "result=invalid-auto-mode"
+			kernel_umount_finish_report
+			return 1
+			;;
+	esac
+	case "$allow_broad" in
+		0|1) ;;
+		*)
+			kernel_umount_report "result=invalid-broad-mode"
 			kernel_umount_finish_report
 			return 1
 			;;
@@ -269,6 +291,7 @@ apply_kernel_umount_mounts() {
 	add_count=0
 	existing_count=0
 	inactive_count=0
+	broad_count=0
 	reject_count=0
 	fail_count=0
 	"$ksu_bin" kernel umount list > "$registered_file" 2>/dev/null || : > "$registered_file"
@@ -301,6 +324,11 @@ apply_kernel_umount_mounts() {
 		if ! kernel_umount_target_is_mounted "$mountinfo_file" "$target"; then
 			kernel_umount_report "skip=$target|$reason|not-mounted"
 			inactive_count=$((inactive_count + 1))
+			continue
+		fi
+		if [ "$allow_broad" = 0 ] && kernel_umount_target_is_broad "$target"; then
+			kernel_umount_report "skip=$target|$reason|broad-target"
+			broad_count=$((broad_count + 1))
 			continue
 		fi
 		if grep -Fqx "$target" "$accepted_file" 2>/dev/null; then
@@ -336,6 +364,7 @@ apply_kernel_umount_mounts() {
 	kernel_umount_report "added=$add_count"
 	kernel_umount_report "existing=$existing_count"
 	kernel_umount_report "inactive=$inactive_count"
+	kernel_umount_report "broad_skipped=$broad_count"
 	kernel_umount_report "rejected=$reject_count"
 	kernel_umount_report "failed=$fail_count"
 	if "$ksu_bin" kernel notify-module-mounted >/dev/null 2>&1; then

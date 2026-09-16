@@ -158,7 +158,7 @@ generate_diagnostics() {
 	local boot_source boot_format live_error_count generated_error_count
 	local module_status overall susfs_status susfs_version susfs_variant
 	local features feature_count ksu_bin ksu_check ksu_current ksu_version kernel_mode
-	local selinux_check selinux_current mount_filter_early mount_filter_late mount_result mount_failures
+	local selinux_check selinux_current mount_filter_early mount_filter_late allow_broad mount_result mount_failures
 	local persistent_owner persistent_mode proc_version uname_release uname_version
 
 	umask 077
@@ -229,6 +229,7 @@ generate_diagnostics() {
 	kernel_mode=$(get_conf KERNEL_UMOUNT_MODE enabled "$PERSISTENT_DIR/config.txt")
 	mount_filter_early=$(get_conf HIDE_SUS_MNTS_NON_SU 0 "$PERSISTENT_DIR/config.txt")
 	mount_filter_late=$(get_conf HIDE_SUS_MNTS_LATE 0 "$PERSISTENT_DIR/config.txt")
+	allow_broad=$(get_conf ALLOW_BROAD_KERNEL_UMOUNT 0 "$PERSISTENT_DIR/config.txt")
 	mount_result=$(diagnostics_property "$mount_report" result not-recorded)
 	mount_failures=$(diagnostics_property "$mount_report" failed "")
 	if [ -z "$mount_failures" ]; then
@@ -246,6 +247,10 @@ generate_diagnostics() {
 		[ "$mount_result" = ok ] || overall=degraded
 	fi
 	case "$mount_filter_late" in
+	0) ;;
+	*) [ "$module_status" = disabled ] || overall=degraded ;;
+	esac
+	case "$allow_broad" in
 	0) ;;
 	*) [ "$module_status" = disabled ] || overall=degraded ;;
 	esac
@@ -297,6 +302,7 @@ generate_diagnostics() {
 		diagnostics_put mount_filter.late "$mount_filter_late"
 		diagnostics_put kernel_umount.configured "$kernel_mode"
 		diagnostics_put kernel_umount.auto "$(get_conf AUTO_KERNEL_UMOUNT 1 "$PERSISTENT_DIR/config.txt")"
+		diagnostics_put kernel_umount.allow_broad "$allow_broad"
 		diagnostics_put kernel_umount.support "$ksu_check"
 		diagnostics_put kernel_umount.current "$ksu_current"
 		diagnostics_put kernel_umount.feature_result "$(diagnostics_property "$feature_report" result not-recorded)"
@@ -305,6 +311,7 @@ generate_diagnostics() {
 		diagnostics_put kernel_umount.added "$(diagnostics_property "$mount_report" added 0)"
 		diagnostics_put kernel_umount.existing "$(diagnostics_property "$mount_report" existing 0)"
 		diagnostics_put kernel_umount.inactive "$(diagnostics_property "$mount_report" inactive 0)"
+		diagnostics_put kernel_umount.broad_skipped "$(diagnostics_property "$mount_report" broad_skipped 0)"
 		diagnostics_put kernel_umount.skipped "$(diagnostics_report_count "$mount_report" 'skip=')"
 		diagnostics_put kernel_umount.rejected "$(diagnostics_property "$mount_report" rejected 0)"
 		diagnostics_put kernel_umount.failures "$mount_failures"

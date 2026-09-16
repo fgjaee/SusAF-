@@ -3,6 +3,18 @@
 This changelog covers Sus'AF development. Upstream history remains available in
 Git history and the upstream project; it is not repeated here.
 
+## v0.1.0-dev.8 — 2026-09-16
+
+- Traced the remaining cross-process mount warning to a migrated explicit
+  `/system_ext` kernel-umount target. ReSukiSU applies registered targets to
+  isolated processes even when the ordinary app UID is not selected for
+  module unmounting, which creates two observable mount views.
+- Preserved broad legacy targets in `kernel_umount.txt` but quarantined exact
+  partition/root mountpoints from automatic registration by default. Narrow
+  file and directory targets continue to work normally.
+- Added an explicit `ALLOW_BROAD_KERNEL_UMOUNT` compatibility override, WebUI
+  control, and diagnostic counts for quarantined targets.
+
 ## v0.1.0-dev.7 — 2026-09-15
 
 - Fixed an inherited boot-stage bug that kept broad Sus mount filtering enabled

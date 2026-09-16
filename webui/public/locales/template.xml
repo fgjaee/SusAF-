@@ -121,6 +121,7 @@
     <string name="diagnostics_selinux_hide_current">SELinux hide state</string>
     <string name="diagnostics_kernel_configured">Configured policy</string>
     <string name="diagnostics_kernel_auto">Auto discovery</string>
+    <string name="diagnostics_kernel_allow_broad">Allow broad targets</string>
     <string name="diagnostics_kernel_support">Feature support</string>
     <string name="diagnostics_kernel_current">Current state</string>
     <string name="diagnostics_kernel_feature_result">Feature apply</string>
@@ -129,6 +130,7 @@
     <string name="diagnostics_kernel_added">Added</string>
     <string name="diagnostics_kernel_existing">Already registered</string>
     <string name="diagnostics_kernel_inactive">Not mounted</string>
+    <string name="diagnostics_kernel_broad_skipped">Broad targets quarantined</string>
     <string name="diagnostics_kernel_skipped">Skipped</string>
     <string name="diagnostics_kernel_rejected">Rejected</string>
     <string name="diagnostics_kernel_failures">Failures</string>

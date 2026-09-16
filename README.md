@@ -13,7 +13,7 @@ Sus'AF is a [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS)-based [KernelSU
 > [!WARNING]
 > Sus'AF is currently a development build. Do not treat it as a stable daily-driver release until the prerelease checklist and device tests are complete.
 
-Current test build: **v0.1.0-dev.7**. Installation is non-interactive; there
+Current test build: **v0.1.0-dev.8**. Installation is non-interactive; there
 are no Volume Up/Down choices.
 
 The remaining release gate is the [device smoke test](docs/DEVICE_SMOKE_TEST.md).
@@ -47,7 +47,7 @@ All optional, all live under `/data/adb/SusAF/`. Missing or empty files mean "no
 | `open_redirect.txt` | redirect a path to another path |
 | `uname.txt` | spoof kernel release/version |
 | `cmdline_or_bootconfig.txt` | spoof `/proc/cmdline` or `/proc/bootconfig` |
-| `kernel_umount.txt` | extra validated KernelSU kernel-umount targets; auto-discovery uses `source=KSU` and module-backed mount metadata |
+| `kernel_umount.txt` | extra validated KernelSU kernel-umount targets; broad partition roots are preserved but quarantined by default |
 | `config.txt` | kernel flags plus explicit `kernel_umount` and Developer Options/ADB policies |
 | `scripts/` | built-in scripts for spoofing and hiding |
 | `scripts_postfs.txt` | scripts to run at post-fs-data stage |
@@ -83,6 +83,9 @@ The Diagnostics page shows the exact daemon selected so a missing manager
 interface cannot be mistaken for missing kernel support. It also distinguishes
 newly added kernel-umount entries from targets already present in KernelSU's
 global list and shows the current `selinux_hide` support/state.
+Whole-partition targets such as `/system_ext` are not registered unless
+`ALLOW_BROAD_KERNEL_UMOUNT=1`; this prevents a legacy entry from creating a
+different mount view for ordinary and isolated app processes.
 
 `ADB_MODE=unchanged` is the safe default. `spoof-off` refuses without changing
 the working transport because this stack cannot currently spoof Settings

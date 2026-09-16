@@ -29,6 +29,7 @@ cat > "$TEST_ROOT/mountinfo" <<'EOF'
 999999999 100 0:6 / /legitimate rw,relatime shared:2 - tmpfs tmpfs rw
 205 100 0:7 / /space\040target ro,relatime - overlay KSU ro
 206 100 0:8 / /manual ro,relatime - ext4 /dev/block/dm-20 ro
+207 100 0:9 / /system_ext ro,relatime - ext4 /dev/block/dm-21 ro
 EOF
 
 cat > "$TEST_ROOT/config" <<'EOF'
@@ -39,6 +40,7 @@ EOF
 cat > "$TEST_ROOT/kernel_umount.txt" <<'EOF'
 # Explicit entries must be validated against mountinfo.
 /manual
+/system_ext
 /system/bin/tool # duplicate of an automatic target
 /missing
 relative
@@ -120,11 +122,13 @@ grep -Fqx 'skip=/system/etc|module-backed|already-present' "$TEST_ROOT/mounts.re
 grep -Fqx 'add=/vendor/lib|module-overlay|ok' "$TEST_ROOT/mounts.report"
 grep -Fqx 'skip=/system/bin/tool|explicit|duplicate' "$TEST_ROOT/mounts.report"
 grep -Fqx 'skip=/missing|explicit|not-mounted' "$TEST_ROOT/mounts.report"
+grep -Fqx 'skip=/system_ext|explicit|broad-target' "$TEST_ROOT/mounts.report"
 grep -Fqx 'reject=relative|explicit|unsafe-path' "$TEST_ROOT/mounts.report"
 grep -Fqx 'reject=/|explicit|unsafe-path' "$TEST_ROOT/mounts.report"
 grep -Fqx 'added=4' "$TEST_ROOT/mounts.report"
 grep -Fqx 'existing=1' "$TEST_ROOT/mounts.report"
 grep -Fqx 'inactive=1' "$TEST_ROOT/mounts.report"
+grep -Fqx 'broad_skipped=1' "$TEST_ROOT/mounts.report"
 grep -Fqx 'rejected=4' "$TEST_ROOT/mounts.report"
 grep -Fqx 'failed=0' "$TEST_ROOT/mounts.report"
 grep -Fqx 'notify=ok' "$TEST_ROOT/mounts.report"
@@ -143,6 +147,24 @@ grep -Fqx 'inactive=1' "$TEST_ROOT/partial.report"
 grep -Fqx 'rejected=4' "$TEST_ROOT/partial.report"
 grep -Fqx 'result=partial' "$TEST_ROOT/partial.report"
 unset SUSAF_FAKE_ADD_FAIL
+SUSAF_FAKE_UMOUNT_LIST_JSON='[{"path":"/system/etc","flags":2}]'
+export SUSAF_FAKE_UMOUNT_LIST_JSON
+
+# Whole-partition targets require an explicit compatibility override.
+cat > "$TEST_ROOT/config.allow-broad" <<'EOF'
+KERNEL_UMOUNT_MODE=enabled
+AUTO_KERNEL_UMOUNT=0
+ALLOW_BROAD_KERNEL_UMOUNT=1
+EOF
+: > "$KSUD_LOG"
+SUSAF_FAKE_UMOUNT_LIST_JSON='[]'
+SUSAF_KERNEL_UMOUNT_REPORT="$TEST_ROOT/allow-broad.report"
+export SUSAF_FAKE_UMOUNT_LIST_JSON SUSAF_KERNEL_UMOUNT_REPORT
+apply_kernel_umount_mounts "$TEST_ROOT/config.allow-broad" "$TEST_ROOT/kernel_umount.txt"
+grep -Fqx 'kernel umount add /system_ext --flags 2' "$KSUD_LOG"
+grep -Fqx 'allow_broad=1' "$TEST_ROOT/allow-broad.report"
+grep -Fqx 'broad_skipped=0' "$TEST_ROOT/allow-broad.report"
+
 SUSAF_FAKE_UMOUNT_LIST_JSON='[{"path":"/system/etc","flags":2}]'
 export SUSAF_FAKE_UMOUNT_LIST_JSON
 

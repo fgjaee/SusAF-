@@ -55,6 +55,9 @@ manager, SuSFS version, tester, date, and result for every section.
 - Confirm Diagnostics reports early mount filter `1` and late blanket mount
   filter `0`; targeted KernelSU umount entries remain registered after the late
   blanket filter is released.
+- Confirm a migrated `/system_ext` entry remains in `kernel_umount.txt` but is
+  reported as a quarantined broad target and does not enter the live kernel
+  list while `ALLOW_BROAD_KERNEL_UMOUNT=0`.
 - Run the late stage twice and confirm existing entries are reported as already
   registered rather than failures; no global umount-list wipe may occur.
 - Confirm Diagnostics shows the current `selinux_hide` support and state.

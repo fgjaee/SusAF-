@@ -25,6 +25,7 @@ const GROUPS = {
         ['mount_filter.late', 'diagnostics_mount_filter_late'],
         ['kernel_umount.configured', 'diagnostics_kernel_configured'],
         ['kernel_umount.auto', 'diagnostics_kernel_auto'],
+        ['kernel_umount.allow_broad', 'diagnostics_kernel_allow_broad'],
         ['kernel_umount.support', 'diagnostics_kernel_support'],
         ['kernel_umount.current', 'diagnostics_kernel_current'],
         ['kernel_umount.feature_result', 'diagnostics_kernel_feature_result'],
@@ -33,6 +34,7 @@ const GROUPS = {
         ['kernel_umount.added', 'diagnostics_kernel_added'],
         ['kernel_umount.existing', 'diagnostics_kernel_existing'],
         ['kernel_umount.inactive', 'diagnostics_kernel_inactive'],
+        ['kernel_umount.broad_skipped', 'diagnostics_kernel_broad_skipped'],
         ['kernel_umount.skipped', 'diagnostics_kernel_skipped'],
         ['kernel_umount.rejected', 'diagnostics_kernel_rejected'],
         ['kernel_umount.failures', 'diagnostics_kernel_failures'],
@@ -123,6 +125,7 @@ function valueWarns(key, value) {
     }
     if (key.endsWith('.mount_result')) return value === 'partial';
     if (key === 'mount_filter.late') return value === '1';
+    if (key === 'kernel_umount.allow_broad') return value !== '0';
     return false;
 }
 

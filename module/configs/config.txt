@@ -32,6 +32,11 @@ KERNEL_UMOUNT_MODE=enabled
 # kernel_umount.txt. The global KernelSU umount list is never wiped.
 AUTO_KERNEL_UMOUNT=1
 
+# Whole-partition/root mountpoints create different views between ordinary and
+# isolated app processes under KernelSU. Preserve them in kernel_umount.txt for
+# review, but do not register them unless this compatibility override is 1.
+ALLOW_BROAD_KERNEL_UMOUNT=0
+
 # Developer Options / ADB handling:
 #   unchanged        = never touch settings, USB properties, or adbd (default)
 #   spoof-off        = refuse safely until the active stack can spoof Settings

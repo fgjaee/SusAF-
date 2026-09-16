@@ -13,6 +13,7 @@ mkdir -p "$STATE_DIR/migrations" "$BIN_DIR"
 cat > "$PERSISTENT_DIR/config.txt" <<'EOF'
 KERNEL_UMOUNT_MODE=enabled
 AUTO_KERNEL_UMOUNT=1
+ALLOW_BROAD_KERNEL_UMOUNT=0
 ADB_MODE=unchanged
 EOF
 cat > "$PERSISTENT_DIR/sus_paths.txt" <<'EOF'
@@ -50,6 +51,7 @@ reject=/missing|explicit|not-mounted
 added=1
 existing=2
 inactive=1
+broad_skipped=1
 rejected=1
 failed=0
 notify=ok
@@ -178,6 +180,7 @@ grep -Fqx 'susfs.feature_count=2' "$REPORT"
 grep -Fqx "kernelsu.binary=$BIN_DIR/ksud" "$REPORT"
 grep -Fqx 'kernel_umount.support=supported' "$REPORT"
 grep -Fqx 'kernel_umount.current=enabled' "$REPORT"
+grep -Fqx 'kernel_umount.allow_broad=0' "$REPORT"
 grep -Fqx 'mount_filter.early=0' "$REPORT"
 grep -Fqx 'mount_filter.late=0' "$REPORT"
 
@@ -201,12 +204,34 @@ sh "$MODULE_DIR/SusAF.sh" --diagnostics >/dev/null
 grep -Fqx 'mount_filter.late=1' "$TEST_ROOT/late-filter.stdout"
 grep -Fqx 'overall.status=degraded' "$TEST_ROOT/late-filter.stdout"
 mv "$PERSISTENT_DIR/config.saved" "$PERSISTENT_DIR/config.txt"
+
+cp "$PERSISTENT_DIR/config.txt" "$PERSISTENT_DIR/config.saved"
+sed -i 's/^ALLOW_BROAD_KERNEL_UMOUNT=.*/ALLOW_BROAD_KERNEL_UMOUNT=1/' "$PERSISTENT_DIR/config.txt"
+SUSAF_DIAGNOSTICS_FILE="$TEST_ROOT/broad-target.stdout" \
+SUSAF_MODULE_DIR="$MODULE_DIR" \
+SUSAF_PERSISTENT_DIR="$PERSISTENT_DIR" \
+SUSAF_LEGACY_RESUSFS_DIR="$TEST_ROOT/no-resusfs" \
+SUSAF_LEGACY_SUSFS4KSU_DIR="$TEST_ROOT/no-susfs4ksu" \
+SUSAF_SUSFS_BIN="$BIN_DIR/ksu_susfs" \
+SUSAF_KSUD_BIN="$BIN_DIR/ksud" \
+SUSAF_SETTINGS_BIN="$BIN_DIR/settings" \
+SUSAF_GETPROP_BIN="$BIN_DIR/getprop" \
+SUSAF_PIDOF_BIN="$BIN_DIR/pidof" \
+SUSAF_MOUNTINFO="$TEST_ROOT/mountinfo" \
+SUSAF_BOOTCONFIG_SOURCE="$TEST_ROOT/bootconfig" \
+SUSAF_CMDLINE_SOURCE="$TEST_ROOT/cmdline" \
+SUSAF_PROC_VERSION="$TEST_ROOT/proc-version" \
+sh "$MODULE_DIR/SusAF.sh" --diagnostics >/dev/null
+grep -Fqx 'kernel_umount.allow_broad=1' "$TEST_ROOT/broad-target.stdout"
+grep -Fqx 'overall.status=degraded' "$TEST_ROOT/broad-target.stdout"
+mv "$PERSISTENT_DIR/config.saved" "$PERSISTENT_DIR/config.txt"
 grep -Fqx 'selinux_hide.support=supported' "$REPORT"
 grep -Fqx 'selinux_hide.current=enabled' "$REPORT"
 grep -Fqx 'kernel_umount.candidates=1' "$REPORT"
 grep -Fqx 'kernel_umount.added=1' "$REPORT"
 grep -Fqx 'kernel_umount.existing=2' "$REPORT"
 grep -Fqx 'kernel_umount.inactive=1' "$REPORT"
+grep -Fqx 'kernel_umount.broad_skipped=1' "$REPORT"
 grep -Fqx 'kernel_umount.skipped=1' "$REPORT"
 grep -Fqx 'kernel_umount.rejected=1' "$REPORT"
 grep -Fqx 'kernel_umount.failures=0' "$REPORT"

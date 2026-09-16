@@ -70,6 +70,8 @@
     <string name="toggle_hide_mnts_desc">Temporarily filters Sus mounts during post-fs-data so zygote does not cache them.</string>
     <string name="toggle_hide_mnts_late">Keep blanket filtering after boot</string>
     <string name="toggle_hide_mnts_late_desc">Compatibility option. Leave off to avoid app and isolated-process mount-table drift.</string>
+    <string name="toggle_allow_broad_umount">Allow whole-partition kernel umounts</string>
+    <string name="toggle_allow_broad_umount_desc">Compatibility option. Leave off to quarantine broad legacy targets such as /system_ext. Reboot after changing.</string>
     <string name="toggle_enable_log">Enable SuSFS Log</string>
     <string name="toggle_enable_log_desc">Turns on susfs' own kernel logging.</string>
     <string name="toggle_avc_spoof">Spoof AVC 'su' Context</string>
@@ -146,6 +148,7 @@
     <string name="diagnostics_mount_filter_late">Late blanket mount filter</string>
     <string name="diagnostics_kernel_configured">Configured policy</string>
     <string name="diagnostics_kernel_auto">Auto discovery</string>
+    <string name="diagnostics_kernel_allow_broad">Allow broad targets</string>
     <string name="diagnostics_kernel_support">Feature support</string>
     <string name="diagnostics_kernel_current">Current state</string>
     <string name="diagnostics_kernel_feature_result">Feature apply</string>
@@ -154,6 +157,7 @@
     <string name="diagnostics_kernel_added">Added</string>
     <string name="diagnostics_kernel_existing">Already registered</string>
     <string name="diagnostics_kernel_inactive">Not mounted</string>
+    <string name="diagnostics_kernel_broad_skipped">Broad targets quarantined</string>
     <string name="diagnostics_kernel_skipped">Skipped</string>
     <string name="diagnostics_kernel_rejected">Rejected</string>
     <string name="diagnostics_kernel_failures">Failures</string>
