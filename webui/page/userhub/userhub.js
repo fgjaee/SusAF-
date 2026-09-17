@@ -1,5 +1,5 @@
 import { exec } from 'kernelsu-alt';
-import { showPrompt, basePath, moduleDirectory, runSusAF, updateUIVisibility } from '../../utils/util.js';
+import { showPrompt, basePath, moduleDirectory, runSusAF, updateUIVisibility, writeTextFileAtomic } from '../../utils/util.js';
 import { getString } from '../../utils/language.js';
 import { openEditor } from '../../utils/editor.js';
 import { FileSelector } from '../../utils/file_selector.js';
@@ -640,12 +640,8 @@ async function openScriptEditor(name) {
     const content = result.errno === 0 ? result.stdout : '';
 
     openEditor(name, content, async (newContent) => {
-        const command = `
-            cat << 'SusAFScriptEOF' > ${path}
-${newContent.trim()}
-SusAFScriptEOF
-            chmod 755 ${path}`;
-        const saveResult = await exec(command);
+        const normalized = newContent.endsWith('\n') ? newContent : `${newContent}\n`;
+        const saveResult = await writeTextFileAtomic(path, normalized, '755');
         if (saveResult.errno === 0) {
             showPrompt(getString('global_saved', path));
         } else {

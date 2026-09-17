@@ -1,5 +1,5 @@
 import { exec } from 'kernelsu-alt';
-import { showPrompt, basePath, filePaths, applyFlags, runSusAF, fetchText, updateUIVisibility } from '../../utils/util.js';
+import { showPrompt, basePath, filePaths, applyFlags, runSusAF, fetchText, updateUIVisibility, writeTextFileAtomic } from '../../utils/util.js';
 import { getString } from '../../utils/language.js';
 import { openEditor } from '../../utils/editor.js';
 import { FileSelector } from '../../utils/file_selector.js';
@@ -167,15 +167,20 @@ async function saveToggles() {
 
     const command = `
         f="${basePath}/${filePaths.config}"
+		tmp="\${f}.webui.$$"
+		trap 'rm -f "$tmp"' EXIT HUP INT TERM
+		[ -f "$f" ] && cp "$f" "$tmp" || : > "$tmp"
         for kv in ${Object.entries(values).map(([k, v]) => `${k}=${v}`).join(' ')}; do
             key=\${kv%%=*}
             val=\${kv#*=}
-            if grep -q "^\${key}=" "$f" 2>/dev/null; then
-                sed -i "s/^\${key}=.*/\${key}=\${val}/" "$f"
+			if grep -q "^\${key}=" "$tmp" 2>/dev/null; then
+				sed -i "s/^\${key}=.*/\${key}=\${val}/" "$tmp"
             else
-                echo "\${key}=\${val}" >> "$f"
+				echo "\${key}=\${val}" >> "$tmp"
             fi
         done
+		chmod 600 "$tmp" && mv "$tmp" "$f"
+		trap - EXIT HUP INT TERM
     `;
     const result = await exec(command);
     if (result.errno !== 0) {
@@ -199,12 +204,8 @@ async function openConfigEditor(key) {
     const content = await fetchText('link/PERSISTENT_DIR/' + fileName, `${basePath}/${fileName}`).catch(() => '');
 
     openEditor(fileName, content, async (newContent) => {
-        const command = `
-            cat << 'SusAFEditorEOF' > ${basePath}/${fileName}
-${newContent.trim()}
-SusAFEditorEOF
-            chmod 644 ${basePath}/${fileName}`;
-        const result = await exec(command);
+        const normalized = newContent.endsWith('\n') ? newContent : `${newContent}\n`;
+        const result = await writeTextFileAtomic(`${basePath}/${fileName}`, normalized, '600');
         if (result.errno === 0) {
             showPrompt(getString('global_saved', `${basePath}/${fileName}`));
         } else {

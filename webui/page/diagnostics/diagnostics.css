@@ -91,6 +91,209 @@
     align-items: center;
 }
 
+.coverage-assistant {
+    padding: 0;
+    overflow: hidden;
+}
+
+.coverage-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 16px;
+}
+
+.coverage-heading h3 {
+    padding: 0;
+    margin: 0 0 5px;
+    font-size: 1em;
+}
+
+.coverage-heading p {
+    max-width: 560px;
+    margin: 0;
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.82em;
+    line-height: 1.45;
+}
+
+.coverage-readonly {
+    flex: 0 0 auto;
+    padding: 5px 9px;
+    border-radius: 999px;
+    color: var(--md-sys-color-on-secondary-container);
+    background: var(--md-sys-color-secondary-container);
+    font-size: 0.7em;
+    font-weight: 600;
+}
+
+.coverage-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: stretch;
+    padding: 0 16px 16px;
+}
+
+.coverage-controls md-outlined-text-field {
+    width: 100%;
+}
+
+.coverage-scan-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.coverage-scan-actions md-filled-button {
+    --md-filled-button-container-shape: 14px;
+}
+
+.coverage-message {
+    display: none;
+    margin: 0 16px 16px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    color: var(--md-sys-color-on-secondary-container);
+    background: var(--md-sys-color-secondary-container);
+    font-size: 0.8em;
+}
+
+.coverage-message.show {
+    display: block;
+}
+
+.coverage-message.error {
+    color: var(--md-sys-color-on-error-container);
+    background: var(--md-sys-color-error-container);
+}
+
+.coverage-results {
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.coverage-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px 16px;
+    padding: 14px 16px;
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.8em;
+}
+
+.coverage-meta strong {
+    color: var(--md-sys-color-on-surface);
+}
+
+.coverage-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--md-sys-color-outline-variant);
+    border-block: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.coverage-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 13px;
+    background: var(--md-sys-color-tonal-surface);
+}
+
+.coverage-summary-item strong {
+    font-size: 1.25em;
+}
+
+.coverage-summary-item span {
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.7em;
+    line-height: 1.3;
+}
+
+.coverage-candidate-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+}
+
+.coverage-candidate-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.coverage-candidate-heading h4 {
+    margin: 0;
+    font-size: 0.9em;
+}
+
+.coverage-candidate-heading span,
+.coverage-empty,
+.coverage-limits {
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.75em;
+}
+
+.coverage-candidates {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+    border-radius: 14px;
+}
+
+.coverage-candidate {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    padding: 12px;
+    background: var(--md-sys-color-tonal-surface);
+}
+
+.coverage-candidate md-checkbox {
+    margin-top: 2px;
+}
+
+.coverage-candidate-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.coverage-candidate-copy strong {
+    font-size: 0.78em;
+}
+
+.coverage-candidate-copy code {
+    overflow-wrap: anywhere;
+    color: var(--md-sys-color-primary);
+    font-family: ui-monospace, "Roboto Mono", monospace;
+    font-size: 0.76em;
+}
+
+.coverage-candidate-copy small {
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.7em;
+}
+
+#coverage-save-selected {
+    align-self: flex-end;
+    --md-filled-button-container-shape: 14px;
+}
+
+.coverage-limits {
+    margin: 0;
+    padding: 0 16px 16px;
+    line-height: 1.45;
+}
+
 .diagnostics-group {
     padding: 0;
     overflow: hidden;
@@ -182,6 +385,25 @@
     .diagnostics-row {
         grid-template-columns: minmax(105px, 0.8fr) minmax(0, 1.2fr);
         gap: 10px;
+    }
+
+    .coverage-heading,
+    .coverage-candidate-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .coverage-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .coverage-scan-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .coverage-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

@@ -78,6 +78,11 @@ const GROUPS = {
     migration: [
         ['migration.resusfs', 'diagnostics_migration_resusfs'],
         ['migration.susfs4ksu', 'diagnostics_migration_susfs4ksu'],
+        ['installer.last_result', 'diagnostics_installer_result'],
+        ['installer.checkpoint', 'diagnostics_installer_checkpoint'],
+        ['installer.config_keys_added', 'diagnostics_installer_config_keys'],
+        ['installer.schedule_repairs', 'diagnostics_installer_schedule_repairs'],
+        ['installer.builtin_updates_pending', 'diagnostics_installer_builtin_updates'],
         ['updater.source_repository', 'diagnostics_updater_source'],
         ['updater.source_commit', 'diagnostics_updater_commit'],
         ['updater.verification', 'diagnostics_updater_verification'],
@@ -104,6 +109,8 @@ const TARGETS = [
 ];
 
 let requestSequence = 0;
+let coverageRequestSequence = 0;
+let currentCoverage = null;
 
 export function parseDiagnostics(text) {
     const values = {};
@@ -216,6 +223,170 @@ function setBusy(busy) {
     if (exportButton) exportButton.disabled = busy;
 }
 
+function coveragePackageIsSafe(packageName) {
+    return packageName.length <= 255
+        && packageName.includes('.')
+        && !packageName.startsWith('.')
+        && !packageName.includes('..')
+        && /^[A-Za-z0-9._]+$/.test(packageName);
+}
+
+function setCoverageBusy(busy) {
+    for (const id of ['coverage-system-scan', 'coverage-app-scan', 'coverage-save-selected', 'coverage-package']) {
+        const element = document.getElementById(id);
+        if (element) element.disabled = busy;
+    }
+    if (!busy) updateCoverageSelection();
+}
+
+function setCoverageMessage(message, isError = false) {
+    const element = document.getElementById('coverage-message');
+    element.textContent = message;
+    element.classList.toggle('error', isError);
+    element.classList.toggle('show', Boolean(message));
+}
+
+function updateCoverageSelection() {
+    const saveButton = document.getElementById('coverage-save-selected');
+    if (!saveButton) return;
+    const selected = Array.from(document.querySelectorAll('#coverage-candidates md-checkbox'))
+        .some(checkbox => checkbox.checked);
+    saveButton.disabled = !selected;
+}
+
+function candidateReason(reason) {
+    const key = `coverage_reason_${reason}`;
+    const translated = getString(key);
+    return translated === key ? reason : translated;
+}
+
+function renderCoverage(values) {
+    if (values.schema !== '1') throw new Error('unsupported coverage schema');
+    currentCoverage = values;
+
+    const packageName = values.package || 'none';
+    const isAppScan = values.mode === 'app';
+    document.getElementById('coverage-result-title').textContent = isAppScan
+        ? getString('coverage_result_app', packageName)
+        : getString('coverage_result_system');
+    document.getElementById('coverage-result-detail').textContent = isAppScan
+        ? getString('coverage_process_detail', values['process.count'] || '0')
+        : getString('coverage_system_detail', values['mount.candidates'] || '0');
+    document.getElementById('coverage-map-candidates').textContent = values['candidate.sus_maps'] || '0';
+    document.getElementById('coverage-path-candidates').textContent = values['candidate.sus_paths_loop'] || '0';
+    document.getElementById('coverage-missing-now').textContent = values['missing.total'] || '0';
+    document.getElementById('coverage-mount-failures').textContent = values['mount.failures'] || '0';
+
+    const container = document.getElementById('coverage-candidates');
+    const empty = document.getElementById('coverage-empty');
+    container.textContent = '';
+    const candidateCount = Number.parseInt(values['candidate.count'] || '0', 10);
+    let rendered = 0;
+
+    for (let id = 1; id <= candidateCount; id++) {
+        const path = values[`candidate.${id}.path`];
+        const kind = values[`candidate.${id}.kind`];
+        const reason = values[`candidate.${id}.reason`];
+        if (!path || !kind) continue;
+
+        const row = document.createElement('label');
+        row.className = 'coverage-candidate';
+
+        const checkbox = document.createElement('md-checkbox');
+        checkbox.dataset.candidateId = String(id);
+        checkbox.addEventListener('change', updateCoverageSelection);
+
+        const copy = document.createElement('span');
+        copy.className = 'coverage-candidate-copy';
+
+        const type = document.createElement('strong');
+        type.textContent = kind === 'sus_map'
+            ? getString('coverage_type_sus_map')
+            : getString('coverage_type_sus_path_loop');
+
+        const exactPath = document.createElement('code');
+        exactPath.textContent = path;
+
+        const why = document.createElement('small');
+        why.textContent = candidateReason(reason);
+
+        copy.append(type, exactPath, why);
+        row.append(checkbox, copy);
+        container.appendChild(row);
+        rendered++;
+    }
+
+    empty.hidden = rendered > 0;
+    document.getElementById('coverage-results').hidden = false;
+    setCoverageMessage('');
+    updateCoverageSelection();
+}
+
+async function loadCoverage(scan = false, packageName = '') {
+    const sequence = ++coverageRequestSequence;
+    setCoverageBusy(true);
+    setCoverageMessage(scan ? getString('coverage_scanning') : '');
+    const command = scan
+        ? `sh "${moduleDirectory}/SusAF.sh" --coverage-scan${packageName ? ` "${packageName}"` : ''}`
+        : `cat "${basePath}/state/coverage.report.txt"`;
+
+    try {
+        const result = await exec(command);
+        if (sequence !== coverageRequestSequence) return;
+        if (result.errno !== 0 || !result.stdout.trim()) {
+            if (!scan) {
+                setCoverageMessage(getString('coverage_not_scanned'));
+                return;
+            }
+            throw new Error(result.stderr || result.stdout || 'coverage scan failed');
+        }
+        renderCoverage(parseDiagnostics(result.stdout));
+        if (scan) showPrompt(getString('coverage_scan_complete'));
+    } catch (error) {
+        if (sequence !== coverageRequestSequence) return;
+        setCoverageMessage(getString('coverage_scan_failed'), true);
+        console.warn('Coverage scan failed:', error);
+    } finally {
+        if (sequence === coverageRequestSequence) setCoverageBusy(false);
+    }
+}
+
+async function scanAppCoverage() {
+    const field = document.getElementById('coverage-package');
+    const packageName = field.value.trim();
+    if (!coveragePackageIsSafe(packageName)) {
+        setCoverageMessage(getString('coverage_invalid_package'), true);
+        return;
+    }
+    await loadCoverage(true, packageName);
+}
+
+async function saveCoverageSelection() {
+    const ids = Array.from(document.querySelectorAll('#coverage-candidates md-checkbox'))
+        .filter(checkbox => checkbox.checked)
+        .map(checkbox => checkbox.dataset.candidateId)
+        .filter(id => /^\d+$/.test(id));
+    if (ids.length === 0) return;
+
+    setCoverageBusy(true);
+    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-apply "${ids.join(',')}"`);
+    setCoverageBusy(false);
+    if (result.errno !== 0) {
+        setCoverageMessage(getString('coverage_save_failed'), true);
+        console.warn('Coverage save failed:', result.stderr || result.stdout);
+        return;
+    }
+
+    const outcome = parseDiagnostics(result.stdout);
+    const added = Number.parseInt(outcome['added.sus_maps'] || '0', 10)
+        + Number.parseInt(outcome['added.sus_paths_loop'] || '0', 10);
+    showPrompt(getString('coverage_saved', added));
+    const packageName = currentCoverage?.mode === 'app' && currentCoverage.package !== 'none'
+        ? currentCoverage.package
+        : '';
+    await loadCoverage(true, packageName);
+}
+
 async function loadDiagnostics(refresh = false) {
     const sequence = ++requestSequence;
     setBusy(true);
@@ -262,13 +433,18 @@ printf '%s\n' "$OUT"
 export function mount() {
     document.getElementById('diagnostics-refresh').onclick = () => loadDiagnostics(true);
     document.getElementById('diagnostics-export').onclick = () => exportDiagnostics();
+    document.getElementById('coverage-system-scan').onclick = () => loadCoverage(true);
+    document.getElementById('coverage-app-scan').onclick = () => scanAppCoverage();
+    document.getElementById('coverage-save-selected').onclick = () => saveCoverageSelection();
 }
 
 export function onShow() {
     updateUIVisibility();
     loadDiagnostics(false);
+    loadCoverage(false);
 }
 
 export function onHide() {
     requestSequence++;
+    coverageRequestSequence++;
 }

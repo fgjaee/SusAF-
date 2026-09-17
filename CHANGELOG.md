@@ -3,6 +3,26 @@
 This changelog covers Sus'AF development. Upstream history remains available in
 Git history and the upstream project; it is not repeated here.
 
+## v0.1.0-dev.9 — 2026-09-17
+
+- Added a conservative Coverage Assistant to Diagnostics. It audits configured
+  rules and schedules, scans one explicitly selected running app for exact
+  file-backed module mappings, and requires manual review before saving.
+- Kept `SUS_MAP` targeted: the assistant neither crawls every shared library
+  nor creates broad directory rules. Unsupported anonymous maps, kernel/TEE
+  signals, properties, packages, and user certificates are called out instead
+  of being presented as fixed.
+- Added private scan reports, strict package/path validation, recoverable
+  checkpoints, provenance logging, and idempotent CLI support through
+  `--coverage-scan` and `--coverage-apply`.
+- Reworked upgrade preservation so existing configuration values, disabled
+  schedule entries, custom scripts, and locally edited built-ins survive
+  reinstall. Packaged updates to edited built-ins are staged for review.
+- Added a pre-upgrade checkpoint and installer result report to Diagnostics,
+  plus atomic WebUI saves for config files, schedules, and UserHub scripts.
+- Fixed the custom-ROM path scan so every recognized ROM prefix is checked
+  rather than only the final prefix in the list.
+
 ## v0.1.0-dev.8 — 2026-09-16
 
 - Traced the remaining cross-process mount warning to a migrated explicit

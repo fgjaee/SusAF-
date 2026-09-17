@@ -74,6 +74,13 @@ backup=created
 rollback=not-needed
 result=installed
 EOF
+cat > "$STATE_DIR/installer.report.txt" <<EOF
+checkpoint=$PERSISTENT_DIR/migration/installer-test/pre-upgrade
+config_keys_added=2
+schedule_repairs=1
+builtin_updates_pending=3
+result=ok
+EOF
 cat > "$STATE_DIR/cmdline_or_bootconfig.generated.txt" <<'EOF'
 androidboot.verifiedbootstate = "green"
 androidboot.vbmeta.device_state = "locked"
@@ -247,6 +254,11 @@ grep -Fqx 'stage.postfs.duration=2' "$REPORT"
 grep -Fqx 'stage.boot.duration=3' "$REPORT"
 grep -Fqx 'migration.resusfs=complete' "$REPORT"
 grep -Fqx 'migration.susfs4ksu=not-needed' "$REPORT"
+grep -Fqx 'installer.last_result=ok' "$REPORT"
+grep -Fqx "installer.checkpoint=$PERSISTENT_DIR/migration/installer-test/pre-upgrade" "$REPORT"
+grep -Fqx 'installer.config_keys_added=2' "$REPORT"
+grep -Fqx 'installer.schedule_repairs=1' "$REPORT"
+grep -Fqx 'installer.builtin_updates_pending=3' "$REPORT"
 grep -Fqx 'updater.verification=verified' "$REPORT"
 grep -Fqx 'updater.backup=created' "$REPORT"
 grep -Fqx 'updater.rollback=not-needed' "$REPORT"

@@ -16,6 +16,14 @@ CONFIG_DIR="$MODPATH/configs"
 
 [ ! -d "$CONFIG_DIR" ] || [ -z "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ] && ui_print "[!] No config files found" && exit 0
 
+mkdir -p "$PERSISTENT_DIR" || exit 1
+chmod 700 "$PERSISTENT_DIR" 2>/dev/null
+installer_prepare_report || exit 1
+checkpoint_existing_install || {
+	installer_finish_report checkpoint-failed
+	exit 1
+}
+
 ui_print "[*] Migrating legacy configuration into $PERSISTENT_DIR"
 migrate_legacy_configs || {
 	ui_print "[!] Migration did not complete. Installation stopped before changing the legacy module."
@@ -27,9 +35,6 @@ repair_legacy_schedule_entries || {
 	exit 1
 }
 
-mkdir -p "$PERSISTENT_DIR" || exit 1
-chmod 700 "$PERSISTENT_DIR" 2>/dev/null
-
 retire_legacy_builtin_names || {
 	ui_print "[!] Could not safely migrate legacy built-in names. Installation stopped."
 	exit 1
@@ -37,6 +42,7 @@ retire_legacy_builtin_names || {
 
 merge_schedule_defaults "$CONFIG_DIR/scripts_postfs.txt" "$PERSISTENT_DIR/scripts_postfs.txt" || exit 1
 merge_schedule_defaults "$CONFIG_DIR/scripts_bootcompleted.txt" "$PERSISTENT_DIR/scripts_bootcompleted.txt" || exit 1
+merge_config_defaults "$CONFIG_DIR/config.txt" "$PERSISTENT_DIR/config.txt" || exit 1
 install_packaged_builtins "$CONFIG_DIR/scripts" "$PERSISTENT_DIR/scripts" || exit 1
 install_missing_defaults "$CONFIG_DIR" "$PERSISTENT_DIR" || exit 1
 repair_oversized_cmdline_bootconfig "$CONFIG_DIR/cmdline_or_bootconfig.txt" || exit 1
@@ -77,5 +83,7 @@ archive_legacy_sources || {
 }
 
 remove_generated_kstat_entries || exit 1
+
+installer_finish_report ok
 
 # EOF

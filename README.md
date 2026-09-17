@@ -13,7 +13,7 @@ Sus'AF is a [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS)-based [KernelSU
 > [!WARNING]
 > Sus'AF is currently a development build. Do not treat it as a stable daily-driver release until the prerelease checklist and device tests are complete.
 
-Current test build: **v0.1.0-dev.8**. Installation is non-interactive; there
+Current test build: **v0.1.0-dev.9**. Installation is non-interactive; there
 are no Volume Up/Down choices.
 
 The remaining release gate is the [device smoke test](docs/DEVICE_SMOKE_TEST.md).
@@ -99,6 +99,7 @@ off and `adbd` has stopped.
 - **Status dashboard**, see if SuSFS is active at a glance, tap for the full enabled-features breakdown straight from the kernel
 - **Configuration summary**, live entry counts per feature and enabled script count, right on the home page
 - **Private diagnostics page**, inspect KernelSU/SuSFS state, boot sanitation, ADB mode, boot-stage results, migration, and targeted-rule counts; refresh or export explicitly
+- **Coverage Assistant**, run a read-only system scan or inspect the exact file-backed mappings used by one running app, then review and save only selected candidates
 - **Built-in code editor**, full-screen editor for every config file and user script, no terminal needed
 - **File manager**, browse storage and load a custom file straight into any feature, without overwriting your default
 - **User-friendly SuSFS configs**, every feature exposed as its own clean box: edit, apply, or load custom
@@ -191,6 +192,23 @@ mode `0600`; it includes system state and counts but excludes configured target
 paths and UserHub script contents. The WebUI Diagnostics page under More reads
 the last boot snapshot without changing device configuration, with separate
 Refresh and Export actions.
+
+The Coverage Assistant is deliberately conservative. Its system scan reports
+stale rules, schedules, migration state, and known recovery/root-tool paths.
+For an app scan, open the detector first and enter its package name; Sus'AF
+examines that running process and proposes only exact mapped files under known
+module/root-manager directories. It does not crawl every `.so`, invent broad
+directory rules, automatically save findings, or claim to cover kernel, TEE,
+package, property, or certificate detections. Selected rules are checkpointed
+before saving and take effect after reboot.
+
+The same workflow is available from a root shell:
+
+```sh
+SusAF --coverage-scan
+SusAF --coverage-scan com.example.detector
+SusAF --coverage-apply 1,3
+```
 
 ## Secure SuSFS userspace updates
 

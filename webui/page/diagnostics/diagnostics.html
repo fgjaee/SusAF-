@@ -21,6 +21,70 @@
     <div class="diagnostics-error" id="diagnostics-error" role="status"></div>
 
     <div id="diagnostics-content" class="diagnostics-content" hidden>
+        <div class="box diagnostics-group coverage-assistant">
+            <div class="coverage-heading">
+                <div>
+                    <h3 data-i18n="coverage_title"></h3>
+                    <p data-i18n="coverage_description"></p>
+                </div>
+                <span class="coverage-readonly" data-i18n="coverage_review_only"></span>
+            </div>
+
+            <div class="coverage-controls">
+                <md-outlined-text-field
+                    id="coverage-package"
+                    data-i18n="coverage_package"
+                    label="Android package"
+                    placeholder="com.example.detector"
+                    autocomplete="off">
+                </md-outlined-text-field>
+                <div class="coverage-scan-actions">
+                    <md-filled-button id="coverage-system-scan" data-i18n="coverage_scan_system"></md-filled-button>
+                    <md-filled-button id="coverage-app-scan" data-i18n="coverage_scan_app"></md-filled-button>
+                </div>
+            </div>
+
+            <div class="coverage-message" id="coverage-message" role="status"></div>
+
+            <div id="coverage-results" class="coverage-results" hidden>
+                <div class="coverage-meta">
+                    <strong id="coverage-result-title"></strong>
+                    <span id="coverage-result-detail"></span>
+                </div>
+
+                <div class="coverage-summary-grid">
+                    <div class="coverage-summary-item">
+                        <strong id="coverage-map-candidates">0</strong>
+                        <span data-i18n="coverage_map_candidates"></span>
+                    </div>
+                    <div class="coverage-summary-item">
+                        <strong id="coverage-path-candidates">0</strong>
+                        <span data-i18n="coverage_path_candidates"></span>
+                    </div>
+                    <div class="coverage-summary-item">
+                        <strong id="coverage-missing-now">0</strong>
+                        <span data-i18n="coverage_missing_now"></span>
+                    </div>
+                    <div class="coverage-summary-item">
+                        <strong id="coverage-mount-failures">0</strong>
+                        <span data-i18n="coverage_mount_failures"></span>
+                    </div>
+                </div>
+
+                <div class="coverage-candidate-section">
+                    <div class="coverage-candidate-heading">
+                        <h4 data-i18n="coverage_exact_candidates"></h4>
+                        <span data-i18n="coverage_select_hint"></span>
+                    </div>
+                    <div class="coverage-empty" id="coverage-empty" data-i18n="coverage_no_candidates"></div>
+                    <div class="coverage-candidates" id="coverage-candidates"></div>
+                    <md-filled-button id="coverage-save-selected" disabled data-i18n="coverage_save_selected"></md-filled-button>
+                </div>
+
+                <p class="coverage-limits" data-i18n="coverage_limits"></p>
+            </div>
+        </div>
+
         <div class="box diagnostics-group">
             <h3 data-i18n="diagnostics_runtime"></h3>
             <div class="diagnostics-rows" id="diagnostics-runtime-rows"></div>

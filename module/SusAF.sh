@@ -15,6 +15,7 @@ SUSFS_MIN_VERSION="v2.2.0"
 . "$MODDIR/lib/kernel-umount.sh"
 . "$MODDIR/lib/diagnostics.sh"
 . "$MODDIR/lib/backup-restore.sh"
+. "$MODDIR/lib/coverage.sh"
 
 versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
 
@@ -408,6 +409,8 @@ show_help () {
 	printf " --restore-config <archive> \t\tstage, validate, and restore a Sus'AF archive\n"
 	printf " --diagnostics \t\t\trefresh and print the private diagnostics snapshot\n"
 	printf " --status-report \t\t\trefresh diagnostics without editing module.prop\n"
+	printf " --coverage-scan [package] \t\tscan exact hiding coverage without changing config\n"
+	printf " --coverage-apply <ids> \t\tcheckpoint and save selected scan candidates\n"
 	printf "\n"
 	printf "if [file] is given it is appended (deduped) into the default list, then applied:\n"
 	printf " --apply-sus-paths [file] \t\tadd_sus_path from list\n"
@@ -442,6 +445,8 @@ case "$1" in
 	--restore-config) restore_susaf_config "$2"; exit ;;
 	--status-report) status_report; exit ;;
 	--diagnostics) show_diagnostics; exit ;;
+	--coverage-scan) coverage_scan "$2"; exit ;;
+	--coverage-apply) coverage_apply_ids "$2"; exit ;;
 	--apply-sus-paths) apply_sus_paths "$2"; exit ;;
 	--apply-sus-paths-loop) apply_sus_paths_loop "$2"; exit ;;
 	--apply-sus-paths-loop-direct) apply_sus_paths_loop_direct "$2"; exit ;;

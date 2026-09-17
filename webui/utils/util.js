@@ -32,6 +32,47 @@ export const applyFlags = {
 export const basePath = "/data/adb/SusAF";
 export const moduleDirectory = "/data/adb/modules/susaf";
 
+function encodeBase64Utf8(text) {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 8192) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+    }
+    return btoa(binary);
+}
+
+/**
+ * Write an internal Sus'AF text file through a same-directory temporary file.
+ * Base64 keeps editor contents out of shell syntax and mv makes the replacement
+ * atomic, so a killed WebUI cannot leave a zero-byte configuration behind.
+ * @param {string} path absolute internal destination
+ * @param {string} content UTF-8 text
+ * @param {'600'|'755'} mode destination permissions
+ * @returns {Promise<object>} kernelsu-alt exec result
+ */
+export async function writeTextFileAtomic(path, content, mode = '600') {
+    const allowedRoot = path.startsWith(`${basePath}/`) || path.startsWith(`${moduleDirectory}/`);
+    if (!allowedRoot || path.includes('..') || !/^\/[A-Za-z0-9_./’-]+$/.test(path)) {
+        throw new Error('Refused unsafe SusAF destination');
+    }
+    if (mode !== '600' && mode !== '755') throw new Error('Refused unsafe file mode');
+
+    const payload = encodeBase64Utf8(content);
+    return exec(`
+destination="${path}"
+temporary="\${destination}.webui.$$"
+trap 'rm -f "$temporary"' EXIT HUP INT TERM
+if command -v base64 >/dev/null 2>&1; then
+    printf '%s' '${payload}' | base64 -d > "$temporary" || exit 1
+else
+    printf '%s' '${payload}' | busybox base64 -d > "$temporary" || exit 1
+fi
+chmod ${mode} "$temporary" || exit 1
+mv "$temporary" "$destination" || exit 1
+trap - EXIT HUP INT TERM
+`);
+}
+
 /**
  * Fetch a file and return its content as text, with a fallback to `exec cat`.
  * @param {string} url The URL to fetch
