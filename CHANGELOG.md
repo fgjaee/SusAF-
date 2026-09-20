@@ -21,6 +21,9 @@ Git history and the upstream project; it is not repeated here.
   Runtime rules are never reported as fully cleared until the required reboot.
 - Kept uname unchanged unless its existing independent control is manually
   enabled. No KPM integration or blanket anonymous-memory claim was added.
+- Documented Sus'AF as an independently maintained ReSuSFS-derived project,
+  including the complete Autopilot evidence/risk model and the sanitized
+  2026-09-20 reference device result.
 
 ## v0.1.0-dev.9 — 2026-09-17
 

@@ -8,7 +8,12 @@
 [![KernelSU](https://img.shields.io/badge/KernelSU-000000?&logo=github&logoColor=white)](https://github.com/tiann/KernelSU)
 [![ReSukiSU](https://img.shields.io/badge/ReSukiSU-E91E63?&logo=github&logoColor=white)](https://github.com/ReSukiSU/ReSukiSU)
 
-Sus'AF is a [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS)-based [KernelSU](https://kernelsu.org) module and WebUI for managing SuSFS, mount hiding, and UserHub automation while keeping the fork practical to sync with upstream.
+Sus'AF began from the [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS)
+codebase, but it is now an independently maintained [KernelSU](https://kernelsu.org)
+module and WebUI with its own automatic audit engine, generated hiding policy,
+risk model, diagnostics, migration, updater, backup format, and release process.
+ReSuSFS remains credited as the upstream foundation; Sus'AF is not a renamed or
+theme-only fork.
 
 > [!WARNING]
 > Sus'AF is currently a development build. Do not treat it as a stable daily-driver release until the prerelease checklist and device tests are complete.
@@ -22,6 +27,34 @@ Upstream changes are integrated through the documented
 [controlled merge process](docs/UPSTREAM_SYNC.md); Sus'AF is never reset or
 rebased onto ReSuSFS.
 
+## More than a ReSuSFS fork
+
+Sus'AF preserves useful ReSuSFS ancestry and the familiar WebUI model, but the
+canonical product branch is `susaf-dev` and its behavior is defined here. Its
+Sus'AF-owned layers include:
+
+- **Autopilot policy generation:** inventories readable running application
+  processes, mapped module files, distinct mount namespaces, live
+  KernelSU/module-backed mounts, known artifacts, and supported spoof controls.
+- **Evidence and risk, not a static target dump:** every generated correction
+  records what was observed, the proposed action, its process/device scope, and
+  a low/medium/high risk level. Low-risk corrections can apply after boot;
+  riskier changes require an explicit WebUI warning.
+- **Recoverable application:** atomic configuration writes, private provenance
+  records, a pre-apply checkpoint, post-apply verification, and rollback.
+- **KernelSU integration:** trusted daemon discovery, targeted `kernel_umount`,
+  broad-target quarantine, already-registered detection, supported
+  `selinux_hide` control, and compatibility with manager-packaged `libksud.so`.
+- **Independent lifecycle:** the `/data/adb/SusAF` data model, guarded migration
+  from older modules, configuration-preserving upgrades, a pinned fail-closed
+  userspace updater, reproducible builds, and a Sus'AF-specific test suite.
+- **Preserved user intent:** UserHub scripts and schedules survive upgrades;
+  ADB and uname behavior remain independent controls and are never silently
+  changed by Autopilot.
+
+See [How Sus'AF Autopilot works](docs/AUTOPILOT.md) for the complete evidence,
+policy, risk, verification, and rollback model.
+
 ## Requirements
 
 - [KernelSU](https://kernelsu.org)
@@ -31,8 +64,12 @@ rebased onto ReSuSFS.
 1. Download the [latest Sus'AF release](https://github.com/fgjaee/SusAF-/releases/latest)
 2. Flash the zip in KernelSU Manager
 3. Reboot
-4. Strong hiding is applied automatically, no setup needed
-5. Optional: edit config files, or use the WebUI to fine-tune
+4. Autopilot audits the settled device after boot and applies only generated
+   low-risk corrections
+5. Open **Diagnostics → Sus'AF Autopilot** to review any medium/high-risk
+   corrections before applying them
+6. Optional: edit config files or use the Advanced controls to fine-tune the
+   generated policy
 
 ## Config files
 
@@ -61,14 +98,17 @@ Packaged built-ins use the `SusAF_` prefix. During migration, only the known
 legacy built-in names are rewritten in schedule files; custom script names and
 contents are left alone.
 
-Strong hiding is applied out of the box with no configuration needed. Power users can fine-tune individual scripts via the WebUI or by editing the files directly.
+Baseline boot tasks are scheduled out of the box, and Autopilot adds only
+evidence-backed low-risk corrections automatically. Power users can review
+riskier generated corrections and fine-tune individual scripts through the
+WebUI or by editing the files directly.
 
 | Script | Stage | What it does |
 |---|---|---|
 | `SusAF_apply-cmdline-bootconfig.sh` | post-fs-data | hides bootloader unlock state from kernel cmdline/bootconfig |
 | `SusAF_apply-kstat-add.sh` | post-fs-data | hides file stats for framework-managed paths |
 | `SusAF_apply-ksu-settings.sh` | post-fs-data | sets KernelSU features for hiding and compatibility |
-| `SusAF_apply-uname.sh` | post-fs-data | spoofs kernel version and build info from uname |
+| `SusAF_apply-uname.sh` | post-fs-data | applies the existing independent uname configuration; Autopilot never edits it |
 | `SusAF_apply-mount-hiding.sh` | boot-completed | hides module mounts redirected to system paths |
 | `SusAF_apply-props.sh` | boot-completed | removes verified-boot error keys without rewriting build identity |
 | `SusAF_apply-settings.sh` | boot-completed | applies the explicit Developer Options/ADB mode; defaults to unchanged |
@@ -99,7 +139,7 @@ off and `adbd` has stopped.
 - **Status dashboard**, see if SuSFS is active at a glance, tap for the full enabled-features breakdown straight from the kernel
 - **Configuration summary**, live entry counts per feature and enabled script count, right on the home page
 - **Private diagnostics page**, inspect KernelSU/SuSFS state, boot sanitation, ADB mode, boot-stage results, migration, and targeted-rule counts; refresh or export explicitly
-- **Sus'AF Autopilot**, inventories running app processes and mount namespaces, generates supported hiding/spoof corrections, applies low-risk findings automatically, warns before risky changes, verifies state, and keeps a rollback checkpoint
+- **Sus'AF Autopilot**, inventories running app processes and mount namespaces, generates supported hiding/spoof corrections, applies low-risk findings automatically, warns before risky changes, verifies state, and keeps a rollback checkpoint; see the [Autopilot guide](docs/AUTOPILOT.md)
 - **Built-in code editor**, full-screen editor for every config file and user script, no terminal needed
 - **File manager**, browse storage and load a custom file straight into any feature, without overwriting your default
 - **User-friendly SuSFS configs**, every feature exposed as its own clean box: edit, apply, or load custom
@@ -154,6 +194,12 @@ usage:
  --status 				show susfs version / variant / enabled features
  --diagnostics 			refresh and print the private diagnostics snapshot
  --status-report 			refresh diagnostics without editing module.prop
+ --coverage-scan [package] 		audit all running apps or one package
+ --coverage-apply <ids> 		checkpoint and apply selected candidates
+ --coverage-apply-safe 		apply all generated low-risk candidates
+ --coverage-verify 			rescan and verify the generated policy
+ --coverage-rollback 		restore the last Autopilot checkpoint
+ --autopilot-boot 			audit and apply safe candidates after boot
 
 if [file] is given it is appended (deduped) into the default list, then applied:
  --apply-sus-paths [file] 		add_sus_path from list
@@ -193,14 +239,19 @@ paths and UserHub script contents. The WebUI Diagnostics page under More reads
 the last boot snapshot without changing device configuration, with separate
 Refresh and Export actions.
 
-The Coverage Assistant is deliberately conservative. Its system scan reports
-stale rules, schedules, migration state, and known recovery/root-tool paths.
-For an app scan, open the detector first and enter its package name; Sus'AF
-examines that running process and proposes only exact mapped files under known
-module/root-manager directories. It does not crawl every `.so`, invent broad
-directory rules, automatically save findings, or claim to cover kernel, TEE,
-package, property, or certificate detections. Selected rules are checkpointed
-before saving and take effect after reboot.
+Autopilot is evidence-driven rather than a raw filesystem crawl. A full audit
+examines every readable running application process (UID 10000 or higher), its
+file-backed maps, each distinct readable mount namespace, the global mount
+view, current root/recovery artifacts, and supported KernelSU/SuSFS controls.
+It generates exact `SUS_MAP`, `SUS_PATH_LOOP`, `kernel_umount`, and supported
+control changes. Medium/high-risk candidates are selected for review but never
+silently applied. A focused audit remains available when one package needs to
+be isolated.
+
+Autopilot verifies the policy it controls; it does not claim to repair TEE
+verdicts, anonymous-memory hooks, package visibility, certificates, or kernel
+behavior for which the installed stack provides no hook. Reboot before using a
+third-party detector as the final namespace check.
 
 The same workflow is available from a root shell:
 
@@ -208,7 +259,27 @@ The same workflow is available from a root shell:
 SusAF --coverage-scan
 SusAF --coverage-scan com.example.detector
 SusAF --coverage-apply 1,3
+SusAF --coverage-verify
+SusAF --coverage-rollback
 ```
+
+## Device-validated result
+
+The 2026-09-20 reference test used the exported Sus'AF configuration and Duck
+Detector report from a Pixel 10 Pro Fold running Android 17 and kernel
+`6.6.143-g7a74b80d`. Duck reported **0 Danger, 1 Warning, 15 Ready, 0 Pending**.
+Its Mount card was clear: no suspicious mount, propagation, mount-ID, or
+namespace-consistency finding was visible, and the previously observed
+`199949` peer-group finding was absent. Kernel, Memory, Dangerous Apps, Play
+Integrity residue, SU, TEE, bootloader, and Zygisk cards were also clear.
+
+The remaining warning was `persist.sys.usb.config=adb`, which is expected when
+the user's explicit `ADB_MODE=unchanged` policy preserves USB debugging.
+Several INFO cards reported reduced or timed-out evidence paths; those are not
+positive detections and are not represented as proof of a stock device.
+
+Read the exact sanitized interpretation, active-risk notes, and coverage limits
+in the [reference device validation](docs/DEVICE_VALIDATION.md).
 
 ## Secure SuSFS userspace updates
 

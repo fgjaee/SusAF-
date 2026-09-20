@@ -68,6 +68,32 @@ manager, SuSFS version, tester, date, and result for every section.
 - Confirm the exact legacy `/system/etc/hosts 100 ... 1 4096` Kstat default is
   removed on upgrade and recoverable from the migration archive.
 
+## Autopilot policy generation
+
+- Reboot with `AUTOPILOT_SCAN_ON_BOOT=1` and confirm the private boot report is
+  generated after Android reaches boot complete.
+- Confirm `AUTOPILOT_APPLY_SAFE=1` applies only low-risk candidates. Medium and
+  high-risk candidates must remain pending for WebUI confirmation.
+- Run **Audit everything** with several ordinary apps and the detector open.
+  Confirm the report counts readable app processes and distinct mount
+  namespaces and records evidence, action, scope, and risk for every candidate.
+- Confirm generated `SUS_MAP` targets are exact existing mapped files beneath
+  approved module/root-manager roots. An arbitrary out-of-scope map must be
+  rejected during apply.
+- If a mount or peer/master/propagation ID exceeds the documented threshold,
+  confirm the late mount-view attempt is classified high risk and displays the
+  warning before apply.
+- Confirm selecting a broad mount target is the only generated path that sets
+  `ALLOW_BROAD_KERNEL_UMOUNT=1`.
+- Apply a mixed selection, confirm a private checkpoint and provenance entry
+  are created, then reboot and run **Verify**.
+- Run **Undo last changes**, reboot, and confirm the prior four policy files are
+  restored and runtime state matches them.
+- Confirm Autopilot does not edit uname, enable KPM, or change ADB while its
+  mode remains `unchanged`.
+- Record the third-party detector result separately from Sus'AF verification;
+  use the format in [Reference device validation](DEVICE_VALIDATION.md).
+
 ## Verified-boot property sanitation
 
 - Confirm `verifiedbooterror` and `verifyerrorpart` properties are removed when
