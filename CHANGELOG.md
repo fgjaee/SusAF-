@@ -3,6 +3,25 @@
 This changelog covers Sus'AF development. Upstream history remains available in
 Git history and the upstream project; it is not repeated here.
 
+## v0.1.0-dev.10 — 2026-09-20
+
+- Replaced the manual-first Coverage Assistant with Sus'AF Autopilot. A full
+  audit now inventories all readable running application processes, their
+  distinct mount namespaces, mapped module files, live module-backed mounts,
+  existing root/recovery artifacts, and supported KernelSU/SuSFS controls.
+- Generated a complete editable policy instead of requiring the user to know
+  SUS_PATH, SUS_MAP, or kernel-umount targets. Evidence-backed low-risk fixes
+  can apply automatically after boot; medium/high-risk fixes are preselected
+  but show a clear notification before application.
+- Added real spoof attempts for high mount/peer IDs, AVC context exposure, and
+  supported KernelSU SELinux hiding. High mount-ID spoofing uses the installed
+  SuSFS application-view filter and is explicitly marked high risk.
+- Added immediate application, post-apply verification, atomic configuration
+  updates, provenance logs, recoverable checkpoints, and one-tap rollback.
+  Runtime rules are never reported as fully cleared until the required reboot.
+- Kept uname unchanged unless its existing independent control is manually
+  enabled. No KPM integration or blanket anonymous-memory claim was added.
+
 ## v0.1.0-dev.9 — 2026-09-17
 
 - Added a conservative Coverage Assistant to Diagnostics. It audits configured

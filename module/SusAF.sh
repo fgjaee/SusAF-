@@ -364,6 +364,7 @@ apply_toggles() {
 stage_early() {
 	echo "[+] stage: early (post-fs-data)"
 	apply_kernel_umount_feature
+	coverage_apply_persistent_features || true
 	apply_kstat_add
 	apply_uname
 	apply_open_redirect
@@ -411,6 +412,10 @@ show_help () {
 	printf " --status-report \t\t\trefresh diagnostics without editing module.prop\n"
 	printf " --coverage-scan [package] \t\tscan exact hiding coverage without changing config\n"
 	printf " --coverage-apply <ids> \t\tcheckpoint and save selected scan candidates\n"
+	printf " --coverage-apply-safe \t\tapply all generated low-risk candidates\n"
+	printf " --coverage-verify \t\t\trescan and verify the generated policy\n"
+	printf " --coverage-rollback \t\trestore the last Autopilot checkpoint\n"
+	printf " --autopilot-boot \t\t\tscan and apply safe candidates after boot\n"
 	printf "\n"
 	printf "if [file] is given it is appended (deduped) into the default list, then applied:\n"
 	printf " --apply-sus-paths [file] \t\tadd_sus_path from list\n"
@@ -447,6 +452,10 @@ case "$1" in
 	--diagnostics) show_diagnostics; exit ;;
 	--coverage-scan) coverage_scan "$2"; exit ;;
 	--coverage-apply) coverage_apply_ids "$2"; exit ;;
+	--coverage-apply-safe) coverage_apply_safe; exit ;;
+	--coverage-verify) coverage_verify; exit ;;
+	--coverage-rollback) coverage_rollback; exit ;;
+	--autopilot-boot) coverage_autopilot_boot; exit ;;
 	--apply-sus-paths) apply_sus_paths "$2"; exit ;;
 	--apply-sus-paths-loop) apply_sus_paths_loop "$2"; exit ;;
 	--apply-sus-paths-loop-direct) apply_sus_paths_loop_direct "$2"; exit ;;

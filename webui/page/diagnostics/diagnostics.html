@@ -27,7 +27,7 @@
                     <h3 data-i18n="coverage_title"></h3>
                     <p data-i18n="coverage_description"></p>
                 </div>
-                <span class="coverage-readonly" data-i18n="coverage_review_only"></span>
+                <span class="coverage-readonly" data-i18n="coverage_autopilot"></span>
             </div>
 
             <div class="coverage-controls">
@@ -62,12 +62,12 @@
                         <span data-i18n="coverage_path_candidates"></span>
                     </div>
                     <div class="coverage-summary-item">
-                        <strong id="coverage-missing-now">0</strong>
-                        <span data-i18n="coverage_missing_now"></span>
+                        <strong id="coverage-mount-candidates">0</strong>
+                        <span data-i18n="coverage_mount_candidates"></span>
                     </div>
                     <div class="coverage-summary-item">
-                        <strong id="coverage-mount-failures">0</strong>
-                        <span data-i18n="coverage_mount_failures"></span>
+                        <strong id="coverage-spoof-candidates">0</strong>
+                        <span data-i18n="coverage_spoof_candidates"></span>
                     </div>
                 </div>
 
@@ -78,12 +78,28 @@
                     </div>
                     <div class="coverage-empty" id="coverage-empty" data-i18n="coverage_no_candidates"></div>
                     <div class="coverage-candidates" id="coverage-candidates"></div>
-                    <md-filled-button id="coverage-save-selected" disabled data-i18n="coverage_save_selected"></md-filled-button>
+                    <div class="coverage-policy-actions">
+                        <md-filled-tonal-button id="coverage-rollback" data-i18n="coverage_rollback"></md-filled-tonal-button>
+                        <md-filled-tonal-button id="coverage-verify" data-i18n="coverage_verify"></md-filled-tonal-button>
+                        <md-filled-button id="coverage-save-selected" disabled data-i18n="coverage_apply_generated"></md-filled-button>
+                    </div>
                 </div>
 
                 <p class="coverage-limits" data-i18n="coverage_limits"></p>
             </div>
         </div>
+
+        <md-dialog id="coverage-risk-dialog">
+            <div slot="headline" data-i18n="coverage_risk_title"></div>
+            <div slot="content">
+                <p data-i18n="coverage_risk_message"></p>
+                <div id="coverage-risk-list" class="coverage-risk-list"></div>
+            </div>
+            <div slot="actions">
+                <md-text-button id="coverage-risk-cancel" data-i18n="global_cancel"></md-text-button>
+                <md-filled-button id="coverage-risk-apply" data-i18n="coverage_apply_anyway"></md-filled-button>
+            </div>
+        </md-dialog>
 
         <div class="box diagnostics-group">
             <h3 data-i18n="diagnostics_runtime"></h3>

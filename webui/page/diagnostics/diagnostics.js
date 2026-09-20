@@ -111,6 +111,7 @@ const TARGETS = [
 let requestSequence = 0;
 let coverageRequestSequence = 0;
 let currentCoverage = null;
+let pendingCoverageIds = [];
 
 export function parseDiagnostics(text) {
     const values = {};
@@ -232,11 +233,18 @@ function coveragePackageIsSafe(packageName) {
 }
 
 function setCoverageBusy(busy) {
-    for (const id of ['coverage-system-scan', 'coverage-app-scan', 'coverage-save-selected', 'coverage-package']) {
+    for (const id of [
+        'coverage-system-scan', 'coverage-app-scan', 'coverage-save-selected',
+        'coverage-verify', 'coverage-rollback', 'coverage-package'
+    ]) {
         const element = document.getElementById(id);
         if (element) element.disabled = busy;
     }
-    if (!busy) updateCoverageSelection();
+    if (!busy) {
+        updateCoverageSelection();
+        const rollback = document.getElementById('coverage-rollback');
+        if (rollback) rollback.disabled = currentCoverage?.['rollback.available'] !== '1';
+    }
 }
 
 function setCoverageMessage(message, isError = false) {
@@ -260,22 +268,43 @@ function candidateReason(reason) {
     return translated === key ? reason : translated;
 }
 
+function candidateType(kind, action) {
+    const actionKey = `coverage_action_${action}`;
+    const actionLabel = getString(actionKey);
+    if (actionLabel !== actionKey) return actionLabel;
+    const kindKey = `coverage_type_${kind}`;
+    const kindLabel = getString(kindKey);
+    return kindLabel === kindKey ? kind : kindLabel;
+}
+
+function selectedCoverageIds() {
+    return Array.from(document.querySelectorAll('#coverage-candidates md-checkbox'))
+        .filter(checkbox => checkbox.checked)
+        .map(checkbox => checkbox.dataset.candidateId)
+        .filter(id => /^\d+$/.test(id));
+}
+
 function renderCoverage(values) {
-    if (values.schema !== '1') throw new Error('unsupported coverage schema');
+    if (values.schema !== '2') throw new Error('unsupported coverage schema');
     currentCoverage = values;
 
     const packageName = values.package || 'none';
     const isAppScan = values.mode === 'app';
     document.getElementById('coverage-result-title').textContent = isAppScan
         ? getString('coverage_result_app', packageName)
-        : getString('coverage_result_system');
+        : getString('coverage_result_autopilot');
     document.getElementById('coverage-result-detail').textContent = isAppScan
         ? getString('coverage_process_detail', values['process.count'] || '0')
-        : getString('coverage_system_detail', values['mount.candidates'] || '0');
+        : getString(
+            'coverage_autopilot_detail',
+            values['process.count'] || '0',
+            values['mount.namespaces'] || '0'
+        );
     document.getElementById('coverage-map-candidates').textContent = values['candidate.sus_maps'] || '0';
     document.getElementById('coverage-path-candidates').textContent = values['candidate.sus_paths_loop'] || '0';
-    document.getElementById('coverage-missing-now').textContent = values['missing.total'] || '0';
-    document.getElementById('coverage-mount-failures').textContent = values['mount.failures'] || '0';
+    document.getElementById('coverage-mount-candidates').textContent = values['candidate.kernel_umount'] || '0';
+    document.getElementById('coverage-spoof-candidates').textContent = values['candidate.spoof'] || '0';
+    document.getElementById('coverage-rollback').disabled = values['rollback.available'] !== '1';
 
     const container = document.getElementById('coverage-candidates');
     const empty = document.getElementById('coverage-empty');
@@ -284,9 +313,12 @@ function renderCoverage(values) {
     let rendered = 0;
 
     for (let id = 1; id <= candidateCount; id++) {
-        const path = values[`candidate.${id}.path`];
+        const path = values[`candidate.${id}.target`] || values[`candidate.${id}.path`];
         const kind = values[`candidate.${id}.kind`];
         const reason = values[`candidate.${id}.reason`];
+        const risk = values[`candidate.${id}.risk`] || 'low';
+        const action = values[`candidate.${id}.action`] || kind;
+        const scope = values[`candidate.${id}.scope`] || 'device';
         if (!path || !kind) continue;
 
         const row = document.createElement('label');
@@ -294,15 +326,24 @@ function renderCoverage(values) {
 
         const checkbox = document.createElement('md-checkbox');
         checkbox.dataset.candidateId = String(id);
+        checkbox.checked = true;
         checkbox.addEventListener('change', updateCoverageSelection);
 
         const copy = document.createElement('span');
         copy.className = 'coverage-candidate-copy';
 
         const type = document.createElement('strong');
-        type.textContent = kind === 'sus_map'
-            ? getString('coverage_type_sus_map')
-            : getString('coverage_type_sus_path_loop');
+        type.textContent = candidateType(kind, action);
+
+        const badges = document.createElement('span');
+        badges.className = 'coverage-candidate-badges';
+        const riskBadge = document.createElement('span');
+        riskBadge.className = `coverage-risk ${risk}`;
+        riskBadge.textContent = getString(`coverage_risk_${risk}`);
+        const scopeBadge = document.createElement('span');
+        scopeBadge.className = 'coverage-scope';
+        scopeBadge.textContent = scope;
+        badges.append(riskBadge, scopeBadge);
 
         const exactPath = document.createElement('code');
         exactPath.textContent = path;
@@ -310,7 +351,7 @@ function renderCoverage(values) {
         const why = document.createElement('small');
         why.textContent = candidateReason(reason);
 
-        copy.append(type, exactPath, why);
+        copy.append(type, badges, exactPath, why);
         row.append(checkbox, copy);
         container.appendChild(row);
         rendered++;
@@ -361,30 +402,72 @@ async function scanAppCoverage() {
     await loadCoverage(true, packageName);
 }
 
-async function saveCoverageSelection() {
-    const ids = Array.from(document.querySelectorAll('#coverage-candidates md-checkbox'))
-        .filter(checkbox => checkbox.checked)
-        .map(checkbox => checkbox.dataset.candidateId)
-        .filter(id => /^\d+$/.test(id));
+async function applyCoverageIds(ids) {
     if (ids.length === 0) return;
 
     setCoverageBusy(true);
     const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-apply "${ids.join(',')}"`);
     setCoverageBusy(false);
     if (result.errno !== 0) {
-        setCoverageMessage(getString('coverage_save_failed'), true);
-        console.warn('Coverage save failed:', result.stderr || result.stdout);
+        setCoverageMessage(getString('coverage_apply_failed'), true);
+        console.warn('Coverage apply failed:', result.stderr || result.stdout);
         return;
     }
 
     const outcome = parseDiagnostics(result.stdout);
     const added = Number.parseInt(outcome['added.sus_maps'] || '0', 10)
-        + Number.parseInt(outcome['added.sus_paths_loop'] || '0', 10);
-    showPrompt(getString('coverage_saved', added));
+        + Number.parseInt(outcome['added.sus_paths_loop'] || '0', 10)
+        + Number.parseInt(outcome['added.kernel_umount'] || '0', 10)
+        + Number.parseInt(outcome['changed.config'] || '0', 10);
+    showPrompt(getString('coverage_applied', added));
     const packageName = currentCoverage?.mode === 'app' && currentCoverage.package !== 'none'
         ? currentCoverage.package
         : '';
     await loadCoverage(true, packageName);
+}
+
+async function saveCoverageSelection() {
+    const ids = selectedCoverageIds();
+    if (ids.length === 0) return;
+    const risky = ids.filter(id => (currentCoverage?.[`candidate.${id}.risk`] || 'low') !== 'low');
+    if (risky.length === 0) {
+        await applyCoverageIds(ids);
+        return;
+    }
+
+    pendingCoverageIds = ids;
+    const list = document.getElementById('coverage-risk-list');
+    list.textContent = '';
+    for (const id of risky) {
+        const item = document.createElement('code');
+        item.textContent = currentCoverage[`candidate.${id}.target`] || '';
+        list.appendChild(item);
+    }
+    document.getElementById('coverage-risk-dialog').show();
+}
+
+async function verifyCoverage() {
+    setCoverageBusy(true);
+    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-verify`);
+    setCoverageBusy(false);
+    if (result.errno === 0) {
+        showPrompt(getString('coverage_verified'));
+        await loadCoverage(false);
+    } else {
+        setCoverageMessage(getString('coverage_verify_attention'), true);
+    }
+}
+
+async function rollbackCoverage() {
+    setCoverageBusy(true);
+    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-rollback`);
+    setCoverageBusy(false);
+    if (result.errno === 0) {
+        showPrompt(getString('coverage_rollback_done'));
+        await loadCoverage(true);
+    } else {
+        setCoverageMessage(getString('coverage_rollback_failed'), true);
+    }
 }
 
 async function loadDiagnostics(refresh = false) {
@@ -436,6 +519,18 @@ export function mount() {
     document.getElementById('coverage-system-scan').onclick = () => loadCoverage(true);
     document.getElementById('coverage-app-scan').onclick = () => scanAppCoverage();
     document.getElementById('coverage-save-selected').onclick = () => saveCoverageSelection();
+    document.getElementById('coverage-verify').onclick = () => verifyCoverage();
+    document.getElementById('coverage-rollback').onclick = () => rollbackCoverage();
+    document.getElementById('coverage-risk-cancel').onclick = () => {
+        pendingCoverageIds = [];
+        document.getElementById('coverage-risk-dialog').close();
+    };
+    document.getElementById('coverage-risk-apply').onclick = async () => {
+        const ids = pendingCoverageIds;
+        pendingCoverageIds = [];
+        document.getElementById('coverage-risk-dialog').close();
+        await applyCoverageIds(ids);
+    };
 }
 
 export function onShow() {

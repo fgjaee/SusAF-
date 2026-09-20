@@ -271,6 +271,34 @@
     font-size: 0.78em;
 }
 
+.coverage-candidate-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.coverage-risk,
+.coverage-scope {
+    display: inline-flex;
+    width: fit-content;
+    padding: 3px 7px;
+    border-radius: 999px;
+    color: var(--md-sys-color-on-secondary-container);
+    background: var(--md-sys-color-secondary-container);
+    font-size: 0.65em;
+    font-weight: 600;
+}
+
+.coverage-risk.medium {
+    color: #3f2e00;
+    background: #ffe08a;
+}
+
+.coverage-risk.high {
+    color: var(--md-sys-color-on-error-container);
+    background: var(--md-sys-color-error-container);
+}
+
 .coverage-candidate-copy code {
     overflow-wrap: anywhere;
     color: var(--md-sys-color-primary);
@@ -284,8 +312,36 @@
 }
 
 #coverage-save-selected {
-    align-self: flex-end;
     --md-filled-button-container-shape: 14px;
+}
+
+.coverage-policy-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.coverage-policy-actions md-filled-button,
+.coverage-policy-actions md-filled-tonal-button {
+    --md-filled-button-container-shape: 14px;
+    --md-filled-tonal-button-container-shape: 14px;
+}
+
+.coverage-risk-list {
+    display: flex;
+    max-height: 240px;
+    flex-direction: column;
+    gap: 6px;
+    overflow: auto;
+}
+
+.coverage-risk-list code {
+    padding: 8px;
+    overflow-wrap: anywhere;
+    border-radius: 8px;
+    background: var(--md-sys-color-error-container);
+    font-size: 0.75em;
 }
 
 .coverage-limits {

@@ -13,7 +13,7 @@ Sus'AF is a [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS)-based [KernelSU
 > [!WARNING]
 > Sus'AF is currently a development build. Do not treat it as a stable daily-driver release until the prerelease checklist and device tests are complete.
 
-Current test build: **v0.1.0-dev.9**. Installation is non-interactive; there
+Current test build: **v0.1.0-dev.10**. Installation is non-interactive; there
 are no Volume Up/Down choices.
 
 The remaining release gate is the [device smoke test](docs/DEVICE_SMOKE_TEST.md).
@@ -99,7 +99,7 @@ off and `adbd` has stopped.
 - **Status dashboard**, see if SuSFS is active at a glance, tap for the full enabled-features breakdown straight from the kernel
 - **Configuration summary**, live entry counts per feature and enabled script count, right on the home page
 - **Private diagnostics page**, inspect KernelSU/SuSFS state, boot sanitation, ADB mode, boot-stage results, migration, and targeted-rule counts; refresh or export explicitly
-- **Coverage Assistant**, run a read-only system scan or inspect the exact file-backed mappings used by one running app, then review and save only selected candidates
+- **Sus'AF Autopilot**, inventories running app processes and mount namespaces, generates supported hiding/spoof corrections, applies low-risk findings automatically, warns before risky changes, verifies state, and keeps a rollback checkpoint
 - **Built-in code editor**, full-screen editor for every config file and user script, no terminal needed
 - **File manager**, browse storage and load a custom file straight into any feature, without overwriting your default
 - **User-friendly SuSFS configs**, every feature exposed as its own clean box: edit, apply, or load custom
