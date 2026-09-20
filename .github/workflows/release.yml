@@ -57,44 +57,7 @@ jobs:
         pnpm build
 
     - name: Static safety checks
-      run: |
-        set -euo pipefail
-        while IFS= read -r -d '' shell_file; do
-          bash -n "$shell_file"
-        done < <(find module tests .github/scripts -type f -name '*.sh' -print0)
-        if grep -R -n -- '--no-check-certificate' module; then
-          echo 'TLS verification bypass found' >&2
-          exit 1
-        fi
-        if grep -R -E -n '/(main|master|universal-binary)/ksu_susfs_arm64' module; then
-          echo 'Moving-branch SuSFS binary URL found' >&2
-          exit 1
-        fi
-        if grep -R -E -n 'tar[[:space:]]+x[z]?f' webui; then
-          echo 'WebUI must not extract archives directly' >&2
-          exit 1
-        fi
-        if grep -R -E -i -n 'paypal|patreon|buymeacoffee|ko-fi|github.com/sponsors' README.md module webui/page webui/utils; then
-          echo 'Donation or sponsorship link found in the module surface' >&2
-          exit 1
-        fi
-        if grep -Fq 'ahmed-alnassif/ReSuSFS' webui/utils/docs.js; then
-          echo 'WebUI documentation must not fetch the upstream runtime feed' >&2
-          exit 1
-        fi
-        if grep -E -i -n 'KernelSU Next (is|is currently).*not recommended|Do not use KernelSU Next|anti-competitive behavior' README.md CHANGELOG.md; then
-          echo 'Project-dispute language found in the public documentation' >&2
-          exit 1
-        fi
-        if find module/configs/scripts -maxdepth 1 -type f -name 'ReSuSFS_*.sh' | grep -q .; then
-          echo 'Legacy-branded packaged built-in found' >&2
-          exit 1
-        fi
-        if grep -E -n 'VOLUME (UP|DOWN)|getevent|detect_key_press' module/customize.sh; then
-          echo 'Timed installer prompt found' >&2
-          exit 1
-        fi
-        test ! -e .github/FUNDING.yml
+      run: .github/scripts/check_repository_policy.sh
 
     - name: Test module scripts
       run: |
