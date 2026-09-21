@@ -455,7 +455,8 @@ function renderCoverage(values) {
         : getString(
             'coverage_autopilot_detail',
             values['process.count'] || '0',
-            values['mount.namespaces'] || '0'
+            values['mount.namespaces'] || '0',
+            values['mount.high_id_namespaces'] || '0'
         );
     document.getElementById('coverage-map-candidates').textContent = values['candidate.sus_maps'] || '0';
     document.getElementById('coverage-path-candidates').textContent = values['candidate.sus_paths_loop'] || '0';
@@ -662,20 +663,37 @@ async function loadDiagnostics(refresh = false) {
 }
 
 async function exportDiagnostics() {
+    const status = document.getElementById('diagnostics-export-status');
     setBusy(true);
-    const result = await exec(`
+    status.className = 'diagnostics-export-status exporting';
+    status.textContent = getString('diagnostics_exporting');
+    status.hidden = false;
+    let result;
+    try {
+        result = await exec(`
 REPORT="${basePath}/state/diagnostics.properties"
 sh "${moduleDirectory}/SusAF.sh" --diagnostics >/dev/null || exit 1
 OUT="/storage/emulated/0/Download/SusAF_diagnostics_$(date +%Y%m%d_%H%M%S).txt"
 cp "$REPORT" "$OUT" || exit 1
 printf '%s\n' "$OUT"
     `);
-    setBusy(false);
-
-    if (result.errno === 0 && result.stdout.trim()) {
-        showPrompt(getString('diagnostics_exported', result.stdout.trim()));
-    } else {
-        showPrompt(getString('diagnostics_export_failed'), false);
+        if (result.errno === 0 && result.stdout.trim()) {
+            const path = result.stdout.trim();
+            status.className = 'diagnostics-export-status success';
+            status.textContent = getString('diagnostics_exported', path);
+            showPrompt(status.textContent, true, 5000);
+        } else {
+            status.className = 'diagnostics-export-status error';
+            status.textContent = getString('diagnostics_export_failed');
+            showPrompt(status.textContent, false, 5000);
+        }
+    } catch (error) {
+        status.className = 'diagnostics-export-status error';
+        status.textContent = getString('diagnostics_export_failed');
+        showPrompt(status.textContent, false, 5000);
+        console.warn('Diagnostics export failed:', error);
+    } finally {
+        setBusy(false);
     }
 }
 

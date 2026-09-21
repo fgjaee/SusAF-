@@ -1,7 +1,7 @@
 id=susaf
 name=Sus’AF
-version=v0.1.0-dev.11
-versionCode=22
+version=v0.1.0-dev.12
+versionCode=23
 author=fgjaee
 updateJson=https://raw.githubusercontent.com/fgjaee/SusAF-/susaf-dev/update.json
 description=Automatic local detection auditing, generated SuSFS/KernelSU corrections, spoof attempts, verification, rollback, and advanced manual controls. Development build.

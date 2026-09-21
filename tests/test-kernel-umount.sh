@@ -87,6 +87,14 @@ SUSAF_DATA_APP_ROOT="$TEST_ROOT/data-app"
 export SUSAF_DATA_APP_ROOT
 [ "$(resolve_ksud_bin)" = "$MANAGER_KSUD" ]
 
+# KernelSU-Next uses com.rifsxd.ksunext and packages ksud as libksud.so.
+rm -f "$MANAGER_KSUD"
+KSUNEXT_KSUD="$TEST_ROOT/data-app/~~install/com.rifsxd.ksunext-current/lib/arm64/libksud.so"
+mkdir -p "$(dirname "$KSUNEXT_KSUD")"
+cp "$TEST_ROOT/bin/ksud" "$KSUNEXT_KSUD"
+chmod 755 "$KSUNEXT_KSUD"
+[ "$(resolve_ksud_bin)" = "$KSUNEXT_KSUD" ]
+
 KSUD_LOG="$TEST_ROOT/ksud.log"
 : > "$KSUD_LOG"
 SUSAF_KSUD_BIN="$TEST_ROOT/bin/ksud"

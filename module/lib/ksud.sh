@@ -34,6 +34,7 @@ resolve_ksud_bin() {
 	# Restrict discovery to known KernelSU-family manager package IDs. Do not
 	# execute an arbitrary libksud.so found in another installed application.
 	for package in \
+		com.rifsxd.ksunext \
 		com.resukisu.resukisu \
 		me.weishu.kernelsu \
 		com.sukisu.ultra

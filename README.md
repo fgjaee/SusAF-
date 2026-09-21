@@ -118,7 +118,8 @@ WebUI or by editing the files directly.
 | `SusAF_cleanup-markers.sh` | boot-completed | removes susfs leftover markers from shared storage |
 
 Sus'AF resolves the KernelSU daemon from trusted standalone locations and from
-known manager-native locations, including ReSukiSU's packaged `libksud.so`.
+known manager-native locations, including ReSukiSU and KernelSU-Next's packaged
+`libksud.so`.
 The Diagnostics page shows the exact daemon selected so a missing manager
 interface cannot be mistaken for missing kernel support. It also distinguishes
 newly added kernel-umount entries from targets already present in KernelSU's

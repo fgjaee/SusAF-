@@ -3,6 +3,19 @@
 This changelog covers Sus'AF development. Upstream history remains available in
 Git history and the upstream project; it is not repeated here.
 
+## v0.1.0-dev.12 — 2026-09-21
+
+- Added trusted daemon discovery for KernelSU-Next's
+  `com.rifsxd.ksunext` manager package and its executable `libksud.so`.
+  Autopilot can now query and apply supported KernelSU feature and mount
+  controls on KernelSU-Next instead of reporting `daemon-unavailable`.
+- Made Diagnostics export show a persistent in-page exporting, saved-path, or
+  failure result, while retaining a longer confirmation prompt.
+- Renamed Autopilot summary counts from apparent detection totals to **new
+  fixes**, and now shows the observed high-mount-ID namespace count. A zero
+  therefore means no new correction was generated, not that nothing was
+  inspected or observed.
+
 ## v0.1.0-dev.11 — 2026-09-21
 
 - Promoted Sus'AF Autopilot to its own bottom navigation destination so audit,

@@ -67,6 +67,43 @@
     --md-filled-button-container-shape: 14px;
 }
 
+.diagnostics-export-status {
+    padding: 10px 12px;
+    border-radius: 12px;
+    color: var(--md-sys-color-on-secondary-container);
+    background: color-mix(in srgb, var(--md-sys-color-surface) 42%, transparent);
+    font-size: 0.78em;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.diagnostics-export-status[hidden] {
+    display: none;
+}
+
+.diagnostics-export-status.exporting::before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 8px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    vertical-align: -1px;
+    animation: coverage-spin 0.9s linear infinite;
+}
+
+.diagnostics-export-status.success {
+    color: #d7ffd9;
+    background: color-mix(in srgb, #1b5e20 72%, transparent);
+}
+
+.diagnostics-export-status.error {
+    color: var(--md-sys-color-on-error-container);
+    background: var(--md-sys-color-error-container);
+}
+
 .diagnostics-error {
     display: none;
     width: calc(100% - 32px);

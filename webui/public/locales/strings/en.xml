@@ -121,6 +121,7 @@
     <string name="diagnostics_generated_at">Snapshot: %s</string>
     <string name="diagnostics_refresh">Refresh</string>
     <string name="diagnostics_export">Export</string>
+    <string name="diagnostics_exporting">Refreshing and exporting diagnostics…</string>
     <string name="diagnostics_refreshed">Diagnostics refreshed</string>
     <string name="diagnostics_exported">Diagnostics saved to %s</string>
     <string name="diagnostics_export_failed">Failed to export diagnostics</string>
@@ -230,10 +231,10 @@
     <string name="coverage_package">Android package</string>
     <string name="coverage_scan_system">Audit everything</string>
     <string name="coverage_scan_app">Focused app audit</string>
-    <string name="coverage_map_candidates">Mapped files</string>
-    <string name="coverage_path_candidates">Visible artifacts</string>
-    <string name="coverage_mount_candidates">Visible mounts</string>
-    <string name="coverage_spoof_candidates">Spoof attempts</string>
+    <string name="coverage_map_candidates">New map fixes</string>
+    <string name="coverage_path_candidates">New path fixes</string>
+    <string name="coverage_mount_candidates">New mount fixes</string>
+    <string name="coverage_spoof_candidates">New spoof fixes</string>
     <string name="coverage_exact_candidates">Generated policy</string>
     <string name="coverage_select_hint">Recommended fixes are selected automatically.</string>
     <string name="coverage_no_candidates">No new supported corrections were generated.</string>
@@ -244,7 +245,7 @@
     <string name="coverage_result_app">Focused audit: %s</string>
     <string name="coverage_result_autopilot">Full-device Autopilot audit</string>
     <string name="coverage_process_detail">%s readable process map(s)</string>
-    <string name="coverage_autopilot_detail">%s running app process(es), %s mount namespace(s)</string>
+    <string name="coverage_autopilot_detail">%1$s running app process(es), %2$s mount namespace(s), %3$s with high mount IDs</string>
     <string name="coverage_type_sus_map">SUS_MAP</string>
     <string name="coverage_type_sus_path_loop">SUS_PATH loop</string>
     <string name="coverage_type_kernel_umount">Kernel umount</string>
