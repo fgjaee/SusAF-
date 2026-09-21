@@ -3,6 +3,25 @@
 This changelog covers Sus'AF development. Upstream history remains available in
 Git history and the upstream project; it is not repeated here.
 
+## v0.1.0-dev.11 — 2026-09-21
+
+- Promoted Sus'AF Autopilot to its own bottom navigation destination so audit,
+  policy review, verification, and rollback no longer sit behind More.
+- Added an always-visible operation overlay for full-device audits, focused
+  audits, apply, Verify, and rollback. It reports the active stage, inspected
+  process or namespace count, elapsed time, and the expected temporary device
+  slowdown while the operation is running.
+- Replaced the generic verification warning with persistent exact results:
+  clean, clean with inactive configured rules, or attention with counts and
+  KernelSU feature/mount runtime status. An unavailable KernelSU daemon can no
+  longer be mistaken for a successful kernel-side verification.
+- Corrected Verify so inactive configured paths remain visible for cleanup but
+  do not create a false active failure by themselves. Remaining supported
+  corrections and true mount registration failures still require attention.
+- Refreshes Diagnostics immediately before export and includes Autopilot scan,
+  verification, and progress summaries, preventing an old boot snapshot from
+  being exported as if it described the just-completed audit.
+
 ## v0.1.0-dev.10 — 2026-09-20
 
 - Replaced the manual-first Coverage Assistant with Sus'AF Autopilot. A full

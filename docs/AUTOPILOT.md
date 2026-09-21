@@ -82,10 +82,14 @@ release broad targets already quarantined in `kernel_umount.txt`.
 
 ## Risk and WebUI flow
 
-Open **More → Diagnostics → Sus'AF Autopilot**.
+Open **Autopilot** in the bottom navigation. The existing Diagnostics entry
+under More remains as an alternate route to the same page.
 
 - **Audit everything** refreshes the full-device policy.
 - **Focused app audit** scans one currently running package.
+- A blocking progress surface remains visible throughout audit, apply, Verify,
+  and rollback. It shows the current stage, process or mount-namespace count,
+  elapsed time, and explains that the phone can temporarily slow down.
 - Every generated candidate is preselected so the user can see the complete
   proposed policy without knowing which rule type to choose.
 - Low-risk-only selections apply immediately.
@@ -111,9 +115,19 @@ atomically replaces the live policy, and attempts the supported runtime apply.
 The provenance log records the candidate IDs, counts, checkpoint, and runtime
 result without storing detector output in a public location.
 
-**Verify** rescans the policy, reports missing configured paths, mount
-registration failures, and remaining candidates. This verifies Sus'AF's own
-policy health; it is not a substitute for a third-party detector.
+**Verify** rescans the policy and reports one of three persistent outcomes:
+
+- **Verified clean** when no supported correction remains and the enabled
+  KernelSU runtime layer reports success.
+- **Clean with inactive rules** when configured paths no longer exist. These
+  rules remain visible for cleanup but are not an active detection failure.
+- **Attention required** for remaining supported corrections, mount
+  registration failures, or an unavailable KernelSU feature/mount interface.
+
+This verifies Sus'AF's own policy health; it is not a substitute for a
+third-party detector. Diagnostics export refreshes the snapshot first and
+includes the scan counts, verification result, runtime status, and last
+operation progress state.
 
 **Undo last changes** restores the most recent checkpoint and reapplies the
 restored policy. Reboot is required to fully remove rules already registered in

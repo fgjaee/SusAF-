@@ -154,6 +154,9 @@ generate_diagnostics() {
 	local generated_mounts="$state_dir/mount_hiding.generated.txt"
 	local postfs_report="$state_dir/stage.post-fs-data.properties"
 	local boot_report="$state_dir/stage.boot-completed.properties"
+	local coverage_report="$state_dir/coverage.report.txt"
+	local coverage_verify="$state_dir/coverage.verify.txt"
+	local coverage_progress="$state_dir/coverage.progress.txt"
 	local mountinfo_file="${SUSAF_MOUNTINFO:-/proc/1/mountinfo}"
 	local candidates="$state_dir/.diagnostics.mounts.$$"
 	local boot_source boot_format live_error_count generated_error_count
@@ -161,6 +164,7 @@ generate_diagnostics() {
 	local features feature_count ksu_bin ksu_check ksu_current ksu_version kernel_mode
 	local selinux_check selinux_current mount_filter_early mount_filter_late allow_broad mount_result mount_failures
 	local persistent_owner persistent_mode proc_version uname_release uname_version
+	local coverage_verify_result
 
 	umask 077
 	mkdir -p "$state_dir" || return 1
@@ -255,6 +259,8 @@ generate_diagnostics() {
 	0) ;;
 	*) [ "$module_status" = disabled ] || overall=degraded ;;
 	esac
+	coverage_verify_result=$(diagnostics_property "$coverage_verify" result not-run)
+	[ "$coverage_verify_result" != attention ] || [ "$module_status" = disabled ] || overall=degraded
 
 	: > "$candidates"
 	collect_kernel_umount_candidates "$mountinfo_file" "$candidates" 2>/dev/null || : > "$candidates"
@@ -332,6 +338,31 @@ generate_diagnostics() {
 		diagnostics_put targets.kernel_umount_malformed "$(diagnostics_invalid_count "$PERSISTENT_DIR/kernel_umount.txt" path)"
 		diagnostics_put targets.pty "$(awk '{ sub(/[[:space:]]*#.*/, ""); if ($1 ~ /^\/dev\/pts\//) seen[$1]=1 } END { for (path in seen) count++; print count + 0 }' "$PERSISTENT_DIR/sus_paths.txt" "$PERSISTENT_DIR/sus_paths_loop.txt" 2>/dev/null)"
 		diagnostics_put targets.mount_hiding_generated "$(diagnostics_list_count "$generated_mounts")"
+
+		diagnostics_put autopilot.report "$([ -s "$coverage_report" ] && printf present || printf missing)"
+		diagnostics_put autopilot.generated_at "$(diagnostics_property "$coverage_report" generated.at not-recorded)"
+		diagnostics_put autopilot.mode "$(diagnostics_property "$coverage_report" mode not-recorded)"
+		diagnostics_put autopilot.processes "$(diagnostics_property "$coverage_report" process.count 0)"
+		diagnostics_put autopilot.mount_namespaces "$(diagnostics_property "$coverage_report" mount.namespaces 0)"
+		diagnostics_put autopilot.high_id_namespaces "$(diagnostics_property "$coverage_report" mount.high_id_namespaces 0)"
+		diagnostics_put autopilot.candidates "$(diagnostics_property "$coverage_report" candidate.count 0)"
+		diagnostics_put autopilot.safe_candidates "$(diagnostics_property "$coverage_report" candidate.safe 0)"
+		diagnostics_put autopilot.risky_candidates "$(diagnostics_property "$coverage_report" candidate.risky 0)"
+		diagnostics_put autopilot.stale_configured "$(diagnostics_property "$coverage_report" missing.total 0)"
+		diagnostics_put autopilot.verification_result "$coverage_verify_result"
+		diagnostics_put autopilot.verification_at "$(diagnostics_property "$coverage_verify" generated.at not-recorded)"
+		diagnostics_put autopilot.verification_stale "$(diagnostics_property "$coverage_verify" missing.configured 0)"
+		diagnostics_put autopilot.verification_mount_failures "$(diagnostics_property "$coverage_verify" mount.failures 0)"
+		diagnostics_put autopilot.verification_remaining "$(diagnostics_property "$coverage_verify" remaining.candidates 0)"
+		diagnostics_put autopilot.verification_runtime_available "$(diagnostics_property "$coverage_verify" runtime.available not-recorded)"
+		diagnostics_put autopilot.verification_feature_result "$(diagnostics_property "$coverage_verify" kernel_umount.feature_result not-recorded)"
+		diagnostics_put autopilot.verification_mount_result "$(diagnostics_property "$coverage_verify" kernel_umount.mount_result not-recorded)"
+		diagnostics_put autopilot.progress_operation "$(diagnostics_property "$coverage_progress" operation none)"
+		diagnostics_put autopilot.progress_status "$(diagnostics_property "$coverage_progress" status idle)"
+		diagnostics_put autopilot.progress_stage "$(diagnostics_property "$coverage_progress" stage none)"
+		diagnostics_put autopilot.progress_current "$(diagnostics_property "$coverage_progress" current 0)"
+		diagnostics_put autopilot.progress_total "$(diagnostics_property "$coverage_progress" total 0)"
+		diagnostics_put autopilot.progress_updated_epoch "$(diagnostics_property "$coverage_progress" updated.epoch 0)"
 
 		diagnostics_put boot.source "$boot_source"
 		diagnostics_put boot.format "$boot_format"

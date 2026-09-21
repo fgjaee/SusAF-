@@ -66,7 +66,7 @@ policy, risk, verification, and rollback model.
 3. Reboot
 4. Autopilot audits the settled device after boot and applies only generated
    low-risk corrections
-5. Open **Diagnostics → Sus'AF Autopilot** to review any medium/high-risk
+5. Open the bottom-bar **Autopilot** destination to review any medium/high-risk
    corrections before applying them
 6. Optional: edit config files or use the Advanced controls to fine-tune the
    generated policy
@@ -235,9 +235,10 @@ SusAF --status
 `SusAF --diagnostics` atomically refreshes
 `/data/adb/SusAF/state/diagnostics.properties` and prints it. The snapshot is
 mode `0600`; it includes system state and counts but excludes configured target
-paths and UserHub script contents. The WebUI Diagnostics page under More reads
-the last boot snapshot without changing device configuration, with separate
-Refresh and Export actions.
+paths and UserHub script contents. The bottom-bar **Autopilot** page reads the
+last boot snapshot without changing device configuration, with separate
+Refresh and Export actions. Export refreshes the snapshot first so the saved
+report describes the current audit state instead of a stale boot snapshot.
 
 Autopilot is evidence-driven rather than a raw filesystem crawl. A full audit
 examines every readable running application process (UID 10000 or higher), its
@@ -250,8 +251,11 @@ be isolated.
 
 Autopilot verifies the policy it controls; it does not claim to repair TEE
 verdicts, anonymous-memory hooks, package visibility, certificates, or kernel
-behavior for which the installed stack provides no hook. Reboot before using a
-third-party detector as the final namespace check.
+behavior for which the installed stack provides no hook. Audit, apply, Verify,
+and rollback show their live stage and elapsed time while the device is busy.
+Verify also refuses to call the kernel layer clean when the KernelSU daemon or
+its feature/mount interface is unavailable. Reboot before using a third-party
+detector as the final namespace check.
 
 The same workflow is available from a root shell:
 

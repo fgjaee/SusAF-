@@ -111,7 +111,7 @@
     <!-- Diagnostics -->
     <string name="diagnostics_title">Diagnostics</string>
     <string name="diagnostics_system">System</string>
-    <string name="diagnostics_open">Device diagnostics</string>
+    <string name="diagnostics_open">Autopilot and device diagnostics</string>
     <string name="diagnostics_loading">Loading diagnostics</string>
     <string name="diagnostics_loading_hint">Reading the last private device snapshot…</string>
     <string name="diagnostics_overall_healthy">System healthy</string>
@@ -289,8 +289,36 @@
     <string name="coverage_invalid_package">Enter a full package name such as com.example.app.</string>
     <string name="coverage_apply_failed">Generated corrections could not all be applied.</string>
     <string name="coverage_applied">Applied %s generated correction(s). Reboot for a clean namespace verification.</string>
-    <string name="coverage_verified">Verification completed.</string>
-    <string name="coverage_verify_attention">Verification still found failed or stale rules. Review the generated policy.</string>
+    <string name="coverage_verified">Verification completed. No active issues were found.</string>
+    <string name="coverage_verified_stale">Verification passed. Inactive configured rules were left in place.</string>
+    <string name="coverage_verify_clean">Verified clean</string>
+    <string name="coverage_verify_clean_with_stale">Verified clean · inactive rules retained</string>
+    <string name="coverage_verify_attention">Verification needs attention</string>
+    <string name="coverage_verify_detail">%1$s inactive configured rule(s) · %2$s mount failure(s) · %3$s remaining correction(s)</string>
+    <string name="coverage_verify_runtime_unavailable">Kernel verification incomplete · feature: %1$s · mount policy: %2$s</string>
+    <string name="coverage_verify_attention_detail">Verification found active issues. The exact counts are shown below.</string>
+    <string name="coverage_progress_audit">Auditing your device</string>
+    <string name="coverage_progress_verify">Verifying Autopilot policy</string>
+    <string name="coverage_progress_apply">Applying generated fixes</string>
+    <string name="coverage_progress_rollback">Restoring previous policy</string>
+    <string name="coverage_progress_working">Working…</string>
+    <string name="coverage_progress_count">%1$s of %2$s checked</string>
+    <string name="coverage_progress_elapsed">%s seconds</string>
+    <string name="coverage_progress_hint">Your phone may briefly slow down while mount namespaces and process maps are inspected. Keep this screen open.</string>
+    <string name="coverage_progress_complete_stage">Complete</string>
+    <string name="coverage_progress_failed_stage">Operation failed</string>
+    <string name="coverage_progress_attention_stage">Review required</string>
+    <string name="coverage_stage_preparing">Preparing the audit…</string>
+    <string name="coverage_stage_artifacts">Checking device artifacts…</string>
+    <string name="coverage_stage_process_maps">Reading application process maps…</string>
+    <string name="coverage_stage_mount_namespaces">Inspecting mount namespaces…</string>
+    <string name="coverage_stage_controls">Checking supported spoof controls…</string>
+    <string name="coverage_stage_finalizing">Generating the policy…</string>
+    <string name="coverage_stage_evaluating">Evaluating verification results…</string>
+    <string name="coverage_stage_checkpoint">Creating a rollback checkpoint…</string>
+    <string name="coverage_stage_policy">Saving the generated policy…</string>
+    <string name="coverage_stage_runtime">Applying runtime rules…</string>
+    <string name="coverage_stage_complete">Complete</string>
     <string name="coverage_rollback_done">Previous policy restored. Reboot to clear runtime rules.</string>
     <string name="coverage_rollback_failed">No valid rollback checkpoint could be restored.</string>
     <!-- More -->
@@ -313,6 +341,7 @@
     <string name="about_repo">Repository</string>
     <!-- Footer -->
     <string name="footer_home">Home</string>
+    <string name="footer_autopilot">Autopilot</string>
     <string name="footer_susfs">SuSFS</string>
     <string name="footer_userhub">UserHub</string>
     <string name="footer_more">More</string>

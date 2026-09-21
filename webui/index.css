@@ -536,6 +536,20 @@
         font-weight: 500;
     }
 
+    @media (max-width: 430px) {
+        .bottom-bar-item {
+            gap: 2px;
+        }
+
+        .bottom-bar-item::before {
+            width: 48px;
+        }
+
+        .bottom-bar-item-text {
+            font-size: 0.68em;
+        }
+    }
+
     .blur-box {
         backdrop-filter: blur(15px);
     }

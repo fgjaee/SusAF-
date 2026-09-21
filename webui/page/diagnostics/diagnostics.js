@@ -112,6 +112,11 @@ let requestSequence = 0;
 let coverageRequestSequence = 0;
 let currentCoverage = null;
 let pendingCoverageIds = [];
+let coverageProgressTimer = null;
+let coverageElapsedTimer = null;
+let coverageProgressInFlight = false;
+let coverageOperation = '';
+let coverageOperationStartedAt = 0;
 
 export function parseDiagnostics(text) {
     const values = {};
@@ -254,6 +259,158 @@ function setCoverageMessage(message, isError = false) {
     element.classList.toggle('show', Boolean(message));
 }
 
+function coverageOperationTitle(operation) {
+    const key = `coverage_progress_${operation}`;
+    const label = getString(key);
+    return label === key ? getString('coverage_progress_audit') : label;
+}
+
+function coverageStageLabel(stage) {
+    const key = `coverage_stage_${stage}`;
+    const label = getString(key);
+    return label === key ? getString('coverage_stage_preparing') : label;
+}
+
+function updateCoverageElapsed() {
+    const target = document.getElementById('coverage-progress-elapsed');
+    if (!target || !coverageOperationStartedAt) return;
+    const seconds = Math.max(0, Math.floor((Date.now() - coverageOperationStartedAt) / 1000));
+    target.textContent = getString('coverage_progress_elapsed', seconds);
+}
+
+function renderCoverageProgress(values) {
+    if (values.schema !== '1' || values.operation !== coverageOperation) return;
+    const updated = Number.parseInt(values['updated.epoch'] || '0', 10);
+    const started = Math.floor(coverageOperationStartedAt / 1000) - 1;
+    if (updated > 0 && updated < started) return;
+
+    const current = Number.parseInt(values.current || '0', 10);
+    const total = Number.parseInt(values.total || '0', 10);
+    const bar = document.getElementById('coverage-progress-bar');
+    const count = document.getElementById('coverage-progress-count');
+    document.getElementById('coverage-operation-stage').textContent = coverageStageLabel(values.stage || 'preparing');
+
+    if (total > 0) {
+        const percent = Math.min(100, Math.max(4, Math.round((current / total) * 100)));
+        bar.classList.remove('indeterminate');
+        bar.style.width = `${percent}%`;
+        count.textContent = getString('coverage_progress_count', current, total);
+    } else {
+        bar.classList.add('indeterminate');
+        bar.style.width = '';
+        count.textContent = getString('coverage_progress_working');
+    }
+}
+
+async function pollCoverageProgress() {
+    if (!coverageOperation || coverageProgressInFlight) return;
+    coverageProgressInFlight = true;
+    try {
+        const result = await exec(`cat "${basePath}/state/coverage.progress.txt" 2>/dev/null`);
+        if (result.errno === 0 && result.stdout.trim()) {
+            renderCoverageProgress(parseDiagnostics(result.stdout));
+        }
+    } catch (error) {
+        console.debug('Autopilot progress is not readable yet:', error);
+    } finally {
+        coverageProgressInFlight = false;
+    }
+}
+
+function beginCoverageOperation(operation) {
+    coverageOperation = operation;
+    coverageOperationStartedAt = Date.now();
+    const overlay = document.getElementById('coverage-operation-overlay');
+    const bar = document.getElementById('coverage-progress-bar');
+    const spinner = document.getElementById('coverage-operation-spinner');
+    document.getElementById('coverage-operation-title').textContent = coverageOperationTitle(operation);
+    document.getElementById('coverage-operation-stage').textContent = coverageStageLabel('preparing');
+    document.getElementById('coverage-progress-count').textContent = getString('coverage_progress_working');
+    spinner.classList.remove('complete');
+    bar.classList.add('indeterminate');
+    bar.style.width = '';
+    overlay.hidden = false;
+    document.body.setAttribute('aria-busy', 'true');
+    updateCoverageElapsed();
+    coverageProgressTimer = window.setInterval(() => void pollCoverageProgress(), 900);
+    coverageElapsedTimer = window.setInterval(updateCoverageElapsed, 1000);
+}
+
+async function waitForCoveragePaint() {
+    await new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+}
+
+async function finishCoverageOperation(outcome = 'complete') {
+    if (coverageProgressTimer) window.clearInterval(coverageProgressTimer);
+    if (coverageElapsedTimer) window.clearInterval(coverageElapsedTimer);
+    coverageProgressTimer = null;
+    coverageElapsedTimer = null;
+    await pollCoverageProgress();
+
+    const spinner = document.getElementById('coverage-operation-spinner');
+    const bar = document.getElementById('coverage-progress-bar');
+    spinner.classList.toggle('complete', outcome === 'complete');
+    bar.classList.remove('indeterminate');
+    bar.style.width = '100%';
+    document.getElementById('coverage-operation-stage').textContent = getString(`coverage_progress_${outcome}_stage`);
+    await new Promise(resolve => window.setTimeout(resolve, outcome === 'complete' ? 450 : 800));
+    document.getElementById('coverage-operation-overlay').hidden = true;
+    document.body.removeAttribute('aria-busy');
+    coverageOperation = '';
+    coverageOperationStartedAt = 0;
+}
+
+async function runCoverageCommand(operation, command) {
+    beginCoverageOperation(operation);
+    await waitForCoveragePaint();
+    return exec(command);
+}
+
+function renderCoverageVerification(values) {
+    const panel = document.getElementById('coverage-verification');
+    if (!values || values.schema !== '1') {
+        panel.hidden = true;
+        return;
+    }
+
+    const result = values.result || 'not-run';
+    if (result === 'not-run') {
+        panel.hidden = true;
+        return;
+    }
+
+    const stale = values['missing.configured'] || '0';
+    const failures = values['mount.failures'] || '0';
+    const remaining = values['remaining.candidates'] || '0';
+    panel.className = 'coverage-verification';
+    if (result === 'attention') panel.classList.add('attention');
+    if (result === 'clean-with-stale') panel.classList.add('stale');
+    document.getElementById('coverage-verification-title').textContent = getString(`coverage_verify_${result.replaceAll('-', '_')}`);
+    document.getElementById('coverage-verification-detail').textContent = getString(
+        'coverage_verify_detail',
+        stale,
+        failures,
+        remaining
+    );
+    const runtime = document.getElementById('coverage-verification-runtime');
+    const featureResult = values['kernel_umount.feature_result'] || 'not-recorded';
+    const mountResult = values['kernel_umount.mount_result'] || 'not-recorded';
+    runtime.className = 'coverage-verification-runtime';
+    runtime.textContent = values['runtime.available'] === '0'
+        ? getString('coverage_verify_runtime_unavailable', featureResult, mountResult)
+        : '';
+    panel.hidden = false;
+}
+
+async function loadCoverageVerification() {
+    const result = await exec(`cat "${basePath}/state/coverage.verify.txt" 2>/dev/null`);
+    if (result.errno !== 0 || !result.stdout.trim()) {
+        renderCoverageVerification(null);
+        return;
+    }
+    renderCoverageVerification(parseDiagnostics(result.stdout));
+}
+
 function updateCoverageSelection() {
     const saveButton = document.getElementById('coverage-save-selected');
     if (!saveButton) return;
@@ -372,7 +529,7 @@ async function loadCoverage(scan = false, packageName = '') {
         : `cat "${basePath}/state/coverage.report.txt"`;
 
     try {
-        const result = await exec(command);
+        const result = scan ? await runCoverageCommand('audit', command) : await exec(command);
         if (sequence !== coverageRequestSequence) return;
         if (result.errno !== 0 || !result.stdout.trim()) {
             if (!scan) {
@@ -382,9 +539,13 @@ async function loadCoverage(scan = false, packageName = '') {
             throw new Error(result.stderr || result.stdout || 'coverage scan failed');
         }
         renderCoverage(parseDiagnostics(result.stdout));
-        if (scan) showPrompt(getString('coverage_scan_complete'));
+        if (scan) {
+            await finishCoverageOperation('complete');
+            showPrompt(getString('coverage_scan_complete'));
+        }
     } catch (error) {
         if (sequence !== coverageRequestSequence) return;
+        if (scan && coverageOperation) await finishCoverageOperation('failed');
         setCoverageMessage(getString('coverage_scan_failed'), true);
         console.warn('Coverage scan failed:', error);
     } finally {
@@ -406,7 +567,8 @@ async function applyCoverageIds(ids) {
     if (ids.length === 0) return;
 
     setCoverageBusy(true);
-    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-apply "${ids.join(',')}"`);
+    const result = await runCoverageCommand('apply', `sh "${moduleDirectory}/SusAF.sh" --coverage-apply "${ids.join(',')}"`);
+    await finishCoverageOperation(result.errno === 0 ? 'complete' : 'failed');
     setCoverageBusy(false);
     if (result.errno !== 0) {
         setCoverageMessage(getString('coverage_apply_failed'), true);
@@ -448,19 +610,23 @@ async function saveCoverageSelection() {
 
 async function verifyCoverage() {
     setCoverageBusy(true);
-    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-verify`);
+    const result = await runCoverageCommand('verify', `sh "${moduleDirectory}/SusAF.sh" --coverage-verify`);
+    const outcome = result.stdout.trim() ? parseDiagnostics(result.stdout) : null;
+    await finishCoverageOperation(result.errno === 0 ? 'complete' : 'attention');
     setCoverageBusy(false);
+    await loadCoverage(false);
+    renderCoverageVerification(outcome);
     if (result.errno === 0) {
-        showPrompt(getString('coverage_verified'));
-        await loadCoverage(false);
+        showPrompt(getString(outcome?.result === 'clean-with-stale' ? 'coverage_verified_stale' : 'coverage_verified'));
     } else {
-        setCoverageMessage(getString('coverage_verify_attention'), true);
+        setCoverageMessage(getString('coverage_verify_attention_detail'), true);
     }
 }
 
 async function rollbackCoverage() {
     setCoverageBusy(true);
-    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-rollback`);
+    const result = await runCoverageCommand('rollback', `sh "${moduleDirectory}/SusAF.sh" --coverage-rollback`);
+    await finishCoverageOperation(result.errno === 0 ? 'complete' : 'failed');
     setCoverageBusy(false);
     if (result.errno === 0) {
         showPrompt(getString('coverage_rollback_done'));
@@ -499,7 +665,7 @@ async function exportDiagnostics() {
     setBusy(true);
     const result = await exec(`
 REPORT="${basePath}/state/diagnostics.properties"
-[ -f "$REPORT" ] || exit 1
+sh "${moduleDirectory}/SusAF.sh" --diagnostics >/dev/null || exit 1
 OUT="/storage/emulated/0/Download/SusAF_diagnostics_$(date +%Y%m%d_%H%M%S).txt"
 cp "$REPORT" "$OUT" || exit 1
 printf '%s\n' "$OUT"
@@ -537,9 +703,18 @@ export function onShow() {
     updateUIVisibility();
     loadDiagnostics(false);
     loadCoverage(false);
+    loadCoverageVerification();
 }
 
 export function onHide() {
     requestSequence++;
     coverageRequestSequence++;
+    if (coverageProgressTimer) window.clearInterval(coverageProgressTimer);
+    if (coverageElapsedTimer) window.clearInterval(coverageElapsedTimer);
+    coverageProgressTimer = null;
+    coverageElapsedTimer = null;
+    coverageOperation = '';
+    coverageOperationStartedAt = 0;
+    document.getElementById('coverage-operation-overlay').hidden = true;
+    document.body.removeAttribute('aria-busy');
 }

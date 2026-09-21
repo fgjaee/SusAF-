@@ -31,6 +31,13 @@ AUTOPILOT_APPLY_SAFE=1
 EOF
 printf 'SusAF_apply-sus-maps.sh\nSusAF_apply-sus-paths.sh\nSusAF_apply-sus-paths-loop.sh\n' \
 	> "$PERSISTENT_DIR/scripts_postfs.txt"
+cat > "$STATE_DIR/kernel_umount.feature.txt" <<'EOF'
+result=ok
+EOF
+cat > "$STATE_DIR/kernel_umount.report.txt" <<'EOF'
+failed=0
+result=ok
+EOF
 
 printf 'mapped\n' > "$MAP_ROOT/target/lib64/already.so"
 printf 'candidate\n' > "$MAP_ROOT/target/lib64/exact-candidate.so"
@@ -100,6 +107,9 @@ grep -Fqx 'candidate.3.target=/system_ext' "$report"
 grep -Fqx 'candidate.3.risk=high' "$report"
 printf '%s\n' "$output" | grep -Fqx 'result=ok'
 ! grep -Fq 'not-mapped.so' "$report"
+grep -Fqx 'operation=audit' "$STATE_DIR/coverage.progress.txt"
+grep -Fqx 'status=complete' "$STATE_DIR/coverage.progress.txt"
+grep -Fqx 'stage=complete' "$STATE_DIR/coverage.progress.txt"
 
 # A hostile package string must be rejected before pidof is called.
 if coverage_scan 'com.example;touch.bad' >/dev/null 2>&1; then
@@ -144,6 +154,53 @@ printf '%s\n' "$rollback_output" | grep -Fqx 'result=restored'
 grep -Fqx '/system/etc/hosts' "$PERSISTENT_DIR/kernel_umount.txt"
 ! grep -Fqx '/system_ext' "$PERSISTENT_DIR/kernel_umount.txt"
 grep -Fqx 'ALLOW_BROAD_KERNEL_UMOUNT=0' "$PERSISTENT_DIR/config.txt"
+
+# Inactive configured paths are stale policy, not an active verification
+# failure. Keep them visible for cleanup without showing a false red result.
+printf '/system/etc/hosts\n/system_ext\n' > "$PERSISTENT_DIR/kernel_umount.txt"
+printf '/does/not/exist\n' >> "$PERSISTENT_DIR/sus_paths_loop.txt"
+cat > "$STATE_DIR/kernel_umount.feature.txt" <<'EOF'
+result=ok
+EOF
+cat > "$STATE_DIR/kernel_umount.report.txt" <<'EOF'
+failed=0
+result=ok
+EOF
+verify_output=$(coverage_verify)
+printf '%s\n' "$verify_output" | grep -Fqx 'result=clean-with-stale'
+printf '%s\n' "$verify_output" | grep -Fqx 'missing.configured=1'
+printf '%s\n' "$verify_output" | grep -Fqx 'remaining.candidates=0'
+grep -Fqx 'operation=verify' "$STATE_DIR/coverage.progress.txt"
+grep -Fqx 'status=complete' "$STATE_DIR/coverage.progress.txt"
+
+# A supported correction that still remains is an active verification issue.
+printf '/system/etc/hosts\n' > "$PERSISTENT_DIR/kernel_umount.txt"
+if attention_output=$(coverage_verify); then
+	echo 'verification ignored a remaining correction' >&2
+	exit 1
+fi
+printf '%s\n' "$attention_output" | grep -Fqx 'result=attention'
+printf '%s\n' "$attention_output" | grep -Fqx 'remaining.candidates=1'
+grep -Fqx 'status=attention' "$STATE_DIR/coverage.progress.txt"
+
+# An unavailable KernelSU daemon leaves the kernel correction layer unverified,
+# even when file and mount inventory produce no remaining candidates.
+printf '/system/etc/hosts\n/system_ext\n' > "$PERSISTENT_DIR/kernel_umount.txt"
+cat > "$STATE_DIR/kernel_umount.feature.txt" <<'EOF'
+result=daemon-unavailable
+EOF
+cat > "$STATE_DIR/kernel_umount.report.txt" <<'EOF'
+failed=0
+result=daemon-unavailable
+EOF
+if runtime_output=$(coverage_verify); then
+	echo 'verification ignored an unavailable KernelSU daemon' >&2
+	exit 1
+fi
+printf '%s\n' "$runtime_output" | grep -Fqx 'result=attention'
+printf '%s\n' "$runtime_output" | grep -Fqx 'runtime.available=0'
+printf '%s\n' "$runtime_output" | grep -Fqx 'kernel_umount.feature_result=daemon-unavailable'
+printf '%s\n' "$runtime_output" | grep -Fqx 'kernel_umount.mount_result=daemon-unavailable'
 
 # A tampered report cannot turn the assistant into an arbitrary-file hider.
 cat > "$report" <<EOF

@@ -428,7 +428,7 @@ export const PAGE_CONFIG = {
     'page-diagnostics': {
         container: null,
         main: [],
-        title: 'diagnostics_title'
+        title: 'coverage_title'
     },
     'default': {
         container: null,

@@ -104,6 +104,40 @@ finished_at=2026-09-12T00:01:03Z
 duration_seconds=3
 exit_status=0
 EOF
+cat > "$STATE_DIR/coverage.report.txt" <<'EOF'
+schema=2
+generated.at=2026-09-12T00:02:00Z
+mode=autopilot
+process.count=109
+mount.namespaces=97
+mount.high_id_namespaces=0
+candidate.count=0
+candidate.safe=0
+candidate.risky=0
+missing.total=2
+result=ok
+EOF
+cat > "$STATE_DIR/coverage.verify.txt" <<'EOF'
+schema=1
+generated.at=2026-09-12T00:03:00Z
+missing.configured=2
+mount.failures=0
+remaining.candidates=0
+kernel_umount.mode=enabled
+kernel_umount.feature_result=ok
+kernel_umount.mount_result=ok
+runtime.available=1
+result=clean-with-stale
+EOF
+cat > "$STATE_DIR/coverage.progress.txt" <<'EOF'
+schema=1
+operation=verify
+status=complete
+stage=complete
+current=1
+total=1
+updated.epoch=1789164180
+EOF
 : > "$STATE_DIR/migrations/v1-resusfs.done"
 
 cat > "$TEST_ROOT/mountinfo" <<'EOF'
@@ -246,6 +280,19 @@ grep -Fqx 'targets.sus_paths=2' "$REPORT"
 grep -Fqx 'targets.sus_paths_malformed=1' "$REPORT"
 grep -Fqx 'targets.open_redirect_malformed=1' "$REPORT"
 grep -Fqx 'targets.pty=1' "$REPORT"
+grep -Fqx 'autopilot.report=present' "$REPORT"
+grep -Fqx 'autopilot.processes=109' "$REPORT"
+grep -Fqx 'autopilot.mount_namespaces=97' "$REPORT"
+grep -Fqx 'autopilot.candidates=0' "$REPORT"
+grep -Fqx 'autopilot.stale_configured=2' "$REPORT"
+grep -Fqx 'autopilot.verification_result=clean-with-stale' "$REPORT"
+grep -Fqx 'autopilot.verification_stale=2' "$REPORT"
+grep -Fqx 'autopilot.verification_remaining=0' "$REPORT"
+grep -Fqx 'autopilot.verification_runtime_available=1' "$REPORT"
+grep -Fqx 'autopilot.verification_feature_result=ok' "$REPORT"
+grep -Fqx 'autopilot.verification_mount_result=ok' "$REPORT"
+grep -Fqx 'autopilot.progress_operation=verify' "$REPORT"
+grep -Fqx 'autopilot.progress_status=complete' "$REPORT"
 grep -Fqx 'boot.live_error_keys=2' "$REPORT"
 grep -Fqx 'boot.generated_error_keys=0' "$REPORT"
 grep -Fqx 'adb.configured=unchanged' "$REPORT"

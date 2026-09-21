@@ -115,7 +115,7 @@ class Router {
     }
 
     updateFooter(name) {
-        const footerName = name === 'diagnostics' ? 'more' : name;
+        const footerName = name;
         document.querySelectorAll('.bottom-bar-item').forEach(item => {
             const isTarget = item.getAttribute('page') === footerName;
             

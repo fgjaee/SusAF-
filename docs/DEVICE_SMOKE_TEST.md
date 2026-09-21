@@ -75,6 +75,9 @@ manager, SuSFS version, tester, date, and result for every section.
 - Confirm `AUTOPILOT_APPLY_SAFE=1` applies only low-risk candidates. Medium and
   high-risk candidates must remain pending for WebUI confirmation.
 - Run **Audit everything** with several ordinary apps and the detector open.
+  Confirm the progress surface appears before the scan starts, advances through
+  process-map and mount-namespace stages, reports elapsed time, and disappears
+  only after completion or a visible failure state.
   Confirm the report counts readable app processes and distinct mount
   namespaces and records evidence, action, scope, and risk for every candidate.
 - Confirm generated `SUS_MAP` targets are exact existing mapped files beneath
@@ -87,6 +90,9 @@ manager, SuSFS version, tester, date, and result for every section.
   `ALLOW_BROAD_KERNEL_UMOUNT=1`.
 - Apply a mixed selection, confirm a private checkpoint and provenance entry
   are created, then reboot and run **Verify**.
+- Confirm Verify reports clean, clean-with-inactive-rules, and runtime
+  unavailable as distinct states. With the KernelSU daemon intentionally
+  unavailable, Verify must require attention even when candidate counts are 0.
 - Run **Undo last changes**, reboot, and confirm the prior four policy files are
   restored and runtime state matches them.
 - Confirm Autopilot does not edit uname, enable KPM, or change ADB while its
@@ -113,8 +119,9 @@ manager, SuSFS version, tester, date, and result for every section.
 
 ## Diagnostics, update, and restore
 
-- Confirm the Diagnostics page loads offline, refreshes on demand, exports a
-  text report, and contains no configured target paths or script bodies.
+- Confirm the Autopilot page loads offline from the bottom navigation,
+  refreshes on demand, exports a newly regenerated text report, and contains no
+  configured target paths or script bodies.
 - Run `SusAF --force-update`; verify the pinned source commit, expected and
   installed SHA-256, compatibility probe, backup, and result in Diagnostics.
 - Run it again and confirm `already-current` without a second download.

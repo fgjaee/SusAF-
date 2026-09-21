@@ -52,6 +52,15 @@
                     <span id="coverage-result-detail"></span>
                 </div>
 
+                <div class="coverage-verification" id="coverage-verification" hidden role="status">
+                    <span class="coverage-verification-dot" id="coverage-verification-dot"></span>
+                    <div>
+                        <strong id="coverage-verification-title"></strong>
+                        <span id="coverage-verification-detail"></span>
+                        <span id="coverage-verification-runtime"></span>
+                    </div>
+                </div>
+
                 <div class="coverage-summary-grid">
                     <div class="coverage-summary-item">
                         <strong id="coverage-map-candidates">0</strong>
@@ -100,6 +109,24 @@
                 <md-filled-button id="coverage-risk-apply" data-i18n="coverage_apply_anyway"></md-filled-button>
             </div>
         </md-dialog>
+
+        <div class="coverage-operation-overlay" id="coverage-operation-overlay" hidden aria-live="assertive" aria-modal="true" role="dialog">
+            <div class="coverage-operation-card">
+                <div class="coverage-operation-spinner" id="coverage-operation-spinner" aria-hidden="true"></div>
+                <div class="coverage-operation-copy">
+                    <h3 id="coverage-operation-title"></h3>
+                    <p id="coverage-operation-stage"></p>
+                </div>
+                <div class="coverage-progress-track" aria-hidden="true">
+                    <span id="coverage-progress-bar"></span>
+                </div>
+                <div class="coverage-operation-meta">
+                    <span id="coverage-progress-count"></span>
+                    <span id="coverage-progress-elapsed"></span>
+                </div>
+                <p class="coverage-operation-hint" data-i18n="coverage_progress_hint"></p>
+            </div>
+        </div>
 
         <div class="box diagnostics-group">
             <h3 data-i18n="diagnostics_runtime"></h3>
