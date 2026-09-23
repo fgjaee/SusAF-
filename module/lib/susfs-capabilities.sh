@@ -439,7 +439,7 @@ show_capabilities() {
 	printf 'SUSFS_VERSION=%s\n' "$version"
 	printf 'SUSFS_VARIANT=%s\n' "$variant"
 
-	printf '%s\n' "$features" | awk '{
+	printf '%s\n' "$features" | tr ',;' '  ' | awk '{
 		for (i = 1; i <= NF; i++) {
 			token = $i
 			gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
