@@ -47,3 +47,25 @@ jobs:
       - name: Build WebUI
         working-directory: webui
         run: pnpm build
+
+      - name: Package installable test module
+        run: |
+          set -eu
+          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+          export SOURCE_DATE_EPOCH
+          mkdir -p dist
+          .github/scripts/package_module.sh module dist/SusAF-capability-routing.zip
+          unzip -t dist/SusAF-capability-routing.zip
+          unzip -p dist/SusAF-capability-routing.zip module.prop | grep -Fqx 'id=susaf'
+          unzip -Z1 dist/SusAF-capability-routing.zip | grep -Fqx 'webroot/index.html'
+          unzip -Z1 dist/SusAF-capability-routing.zip | grep -Fqx 'lib/susfs-capabilities.sh'
+          sha256sum dist/SusAF-capability-routing.zip > dist/SHA256SUMS
+
+      - name: Upload test module
+        uses: actions/upload-artifact@v7
+        with:
+          name: SusAF-capability-routing
+          if-no-files-found: error
+          path: |
+            dist/SusAF-capability-routing.zip
+            dist/SHA256SUMS
