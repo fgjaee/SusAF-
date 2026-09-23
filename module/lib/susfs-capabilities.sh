@@ -202,6 +202,10 @@ susfs_set_mount_filter() {
 susfs_prepare_path_roots() {
 	result=0
 
+	if ! susfs_has_command add_sus_path && ! susfs_has_command add_sus_path_loop; then
+		return 0
+	fi
+
 	if susfs_has_command set_sdcard_root_path; then
 		if [ -d /sdcard ]; then
 			echo "[>] set_sdcard_root_path /sdcard"
