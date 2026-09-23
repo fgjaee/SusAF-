@@ -80,7 +80,7 @@ SUSAF_FAKE_VERSION=v2.3.0
 SUSAF_FAKE_VARIANT=ReSukiSU
 SUSAF_FAKE_KSU_CHECK=supported
 SUSAF_FAKE_FEATURES='CONFIG_KSU_SUSFS_SUS_PATH,CONFIG_KSU_SUSFS_SUS_MAP;CONFIG_KSU_SUSFS_SUS_KSTAT CONFIG_KSU_SUSFS_OPEN_REDIRECT CONFIG_KSU_SUSFS_SPOOF_UNAME CONFIG_KSU_SUSFS_ENABLE_LOG CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT CONFIG_KSU_SUSFS_SUS_OVERLAYFS CONFIG_KSU_SUSFS_FUTURE_TEST'
-SUSAF_FAKE_HELP='add_sus_path add_sus_path_loop add_sus_map add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect set_uname set_cmdline_or_bootconfig hide_sus_mnts_for_non_su_procs enable_log enable_avc_log_spoofing'
+SUSAF_FAKE_HELP='add_sus_path add_sus_path_loop add_sus_map add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect set_uname set_cmdline_or_bootconfig set_sdcard_root_path set_android_data_root_path hide_sus_mnts_for_all_procs hide_sus_mnts_for_non_su_procs enable_log enable_avc_log_spoofing'
 export SUSAF_FAKE_VERSION SUSAF_FAKE_VARIANT SUSAF_FAKE_KSU_CHECK SUSAF_FAKE_FEATURES SUSAF_FAKE_HELP
 reset_capability_cache
 
@@ -93,11 +93,32 @@ grep -Fqx 'UMOUNT_BACKEND=kernel_umount' "$TEST_ROOT/v2.out"
 grep -Fqx 'CMD_ADD_SUS_PATH=1' "$TEST_ROOT/v2.out"
 grep -Fqx 'CMD_ADD_TRY_UMOUNT=0' "$TEST_ROOT/v2.out"
 grep -Fqx 'KERNEL_UMOUNT=1' "$TEST_ROOT/v2.out"
+grep -Fqx 'MOUNT_FILTER_BACKEND=hide_sus_mnts_for_all_procs' "$TEST_ROOT/v2.out"
+grep -Fqx 'CMD_SET_SDCARD_ROOT_PATH=1' "$TEST_ROOT/v2.out"
+grep -Fqx 'CMD_SET_ANDROID_DATA_ROOT_PATH=1' "$TEST_ROOT/v2.out"
 grep -Fqx 'REGISTRY=kernel_umount|control|1|kernelsu:kernel_umount|none' "$TEST_ROOT/v2.out"
 grep -Fqx 'REGISTRY=try_umount|legacy|0|command:add_try_umount|kernel_umount' "$TEST_ROOT/v2.out"
 grep -Fqx 'REGISTRY=sus_mount|legacy|0|command:add_sus_mount|kernel_managed_mounts' "$TEST_ROOT/v2.out"
 grep -Fqx 'REGISTRY=auto_bind_mount|status|1|feature:CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT|none' "$TEST_ROOT/v2.out"
 grep -Fqx 'UNMAPPED_FEATURE=CONFIG_KSU_SUSFS_FUTURE_TEST' "$TEST_ROOT/v2.out"
+
+mkdir -p "$TEST_ROOT/sdcard/Android/data"
+SUSAF_SDCARD_ROOT="$TEST_ROOT/sdcard"
+SUSAF_ANDROID_DATA_ROOT="$TEST_ROOT/sdcard/Android/data"
+SUSAF_ANDROID_DATA_WAIT_SECONDS=0
+export SUSAF_SDCARD_ROOT SUSAF_ANDROID_DATA_ROOT SUSAF_ANDROID_DATA_WAIT_SECONDS
+: > "$SUSAF_FAKE_SUSFS_LOG"
+susfs_prepare_path_roots >/dev/null
+grep -Fqx "set_sdcard_root_path $TEST_ROOT/sdcard" "$SUSAF_FAKE_SUSFS_LOG"
+grep -Fqx "set_android_data_root_path $TEST_ROOT/sdcard/Android/data" "$SUSAF_FAKE_SUSFS_LOG"
+
+: > "$SUSAF_FAKE_SUSFS_LOG"
+susfs_set_mount_filter 1 >/dev/null
+grep -Fqx 'hide_sus_mnts_for_all_procs 1' "$SUSAF_FAKE_SUSFS_LOG"
+
+: > "$SUSAF_FAKE_SUSFS_LOG"
+susfs_add_open_redirect /original /redirected 4 >/dev/null
+grep -Fqx 'add_open_redirect /original /redirected 4' "$SUSAF_FAKE_SUSFS_LOG"
 
 # Older generation: custom try_umount and sus_mount remain controllable when
 # the helper/kernel expose them and KernelSU's official backend is unavailable.
@@ -112,9 +133,19 @@ reset_capability_cache
 show_capabilities > "$TEST_ROOT/v1.out"
 grep -Fqx 'UMOUNT_BACKEND=susfs_try_umount' "$TEST_ROOT/v1.out"
 grep -Fqx 'KERNEL_UMOUNT=0' "$TEST_ROOT/v1.out"
+grep -Fqx 'MOUNT_FILTER_BACKEND=hide_sus_mnts_for_non_su_procs' "$TEST_ROOT/v1.out"
 grep -Fqx 'REGISTRY=sus_mount|control|1|command:add_sus_mount|none' "$TEST_ROOT/v1.out"
 grep -Fqx 'REGISTRY=try_umount|control|1|command:add_try_umount|none' "$TEST_ROOT/v1.out"
 grep -Fqx 'REGISTRY=sus_su|status|1|feature:CONFIG_KSU_SUSFS_SUS_SU|none' "$TEST_ROOT/v1.out"
+
+: > "$SUSAF_FAKE_SUSFS_LOG"
+susfs_set_mount_filter 1 >/dev/null
+grep -Fqx 'hide_sus_mnts_for_non_su_procs 1' "$SUSAF_FAKE_SUSFS_LOG"
+
+: > "$SUSAF_FAKE_SUSFS_LOG"
+susfs_add_open_redirect /original /redirected 4 >/dev/null
+grep -Fqx 'add_open_redirect /original /redirected' "$SUSAF_FAKE_SUSFS_LOG"
+! grep -Fq 'add_open_redirect /original /redirected 4' "$SUSAF_FAKE_SUSFS_LOG"
 
 # Unknown/new commands are passed through so helper errors stay visible.
 : > "$SUSAF_FAKE_SUSFS_LOG"
