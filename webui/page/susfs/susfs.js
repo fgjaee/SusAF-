@@ -358,7 +358,7 @@ const TOGGLE_ROWS = [
 ];
 
 async function loadToggles() {
-    const result = await exec(`cat "${basePath}/${filePaths.config}" 2>/dev/null`);
+    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --config-show`);
     const content = result.errno === 0 ? result.stdout : '';
     TOGGLE_ROWS.forEach(({ id, key }) => {
         const match = content.match(new RegExp(`^${key}=(.*)$`, 'm'));
@@ -368,35 +368,31 @@ async function loadToggles() {
     });
 }
 
-async function saveToggles() {
+let toggleSavePromise = Promise.resolve();
+
+async function saveTogglesNow() {
     const values = {};
     TOGGLE_ROWS.forEach(({ id, key }) => {
         const row = document.getElementById(id);
         values[key] = row.querySelector('md-switch').selected ? '1' : '0';
     });
 
-    const command = `
-        f="${basePath}/${filePaths.config}"
-		tmp="\${f}.webui.$$"
-		trap 'rm -f "$tmp"' EXIT HUP INT TERM
-		[ -f "$f" ] && cp "$f" "$tmp" || : > "$tmp"
-        for kv in ${Object.entries(values).map(([k, v]) => `${k}=${v}`).join(' ')}; do
-            key=\${kv%%=*}
-            val=\${kv#*=}
-			if grep -q "^\${key}=" "$tmp" 2>/dev/null; then
-				sed -i "s/^\${key}=.*/\${key}=\${val}/" "$tmp"
-            else
-				echo "\${key}=\${val}" >> "$tmp"
-            fi
-        done
-		chmod 600 "$tmp" && mv "$tmp" "$f"
-		trap - EXIT HUP INT TERM
-    `;
-    const result = await exec(command);
+    const assignments = Object.entries(values).map(([key, value]) => `${key}=${value}`);
+    const result = await exec(
+        `sh "${moduleDirectory}/SusAF.sh" --config-set ${assignments.join(' ')}`
+    );
     if (result.errno !== 0) {
         showPrompt(getString('global_save_fail'), false);
-        console.error('Failed to save toggles:', result.stderr);
+        console.error('Failed to save toggles through SusAF controller:', result.stderr);
+        throw new Error(result.stderr || 'SusAF config save failed');
     }
+}
+
+function saveToggles() {
+    toggleSavePromise = toggleSavePromise
+        .catch(() => {})
+        .then(() => saveTogglesNow());
+    return toggleSavePromise;
 }
 
 function setupToggles() {
