@@ -155,7 +155,7 @@ cat > "$BIN_DIR/ksu_susfs" <<'EOF'
 case "$1 $2" in
     'show version') printf 'v2.3.0\n' ;;
     'show variant') printf 'GKI\n' ;;
-    'show enabled_features') printf 'SUS_PATH\nSUS_MAP\n' ;;
+    'show enabled_features') printf 'CONFIG_KSU_SUSFS_SUS_PATH\nCONFIG_KSU_SUSFS_SUS_MAP\n' ;;
     *) exit 1 ;;
 esac
 EOF
