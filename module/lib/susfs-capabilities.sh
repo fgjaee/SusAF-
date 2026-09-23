@@ -201,17 +201,19 @@ susfs_set_mount_filter() {
 
 susfs_prepare_path_roots() {
 	result=0
+	sdcard_root="${SUSAF_SDCARD_ROOT:-/sdcard}"
+	android_data_root="${SUSAF_ANDROID_DATA_ROOT:-$sdcard_root/Android/data}"
 
 	if ! susfs_has_command add_sus_path && ! susfs_has_command add_sus_path_loop; then
 		return 0
 	fi
 
 	if susfs_has_command set_sdcard_root_path; then
-		if [ -d /sdcard ]; then
-			echo "[>] set_sdcard_root_path /sdcard"
-			susfs set_sdcard_root_path /sdcard || result=1
+		if [ -d "$sdcard_root" ]; then
+			echo "[>] set_sdcard_root_path $sdcard_root"
+			susfs set_sdcard_root_path "$sdcard_root" || result=1
 		else
-			echo "[!] /sdcard is unavailable; skipped SUS_PATH sdcard root setup"
+			echo "[!] $sdcard_root is unavailable; skipped SUS_PATH sdcard root setup"
 		fi
 	fi
 
@@ -221,15 +223,15 @@ susfs_prepare_path_roots() {
 			''|*[!0-9]*) wait_seconds=30 ;;
 		esac
 		elapsed=0
-		while [ ! -d /sdcard/Android/data ] && [ "$elapsed" -lt "$wait_seconds" ]; do
+		while [ ! -d "$android_data_root" ] && [ "$elapsed" -lt "$wait_seconds" ]; do
 			sleep 1
 			elapsed=$((elapsed + 1))
 		done
-		if [ -d /sdcard/Android/data ]; then
-			echo "[>] set_android_data_root_path /sdcard/Android/data"
-			susfs set_android_data_root_path /sdcard/Android/data || result=1
+		if [ -d "$android_data_root" ]; then
+			echo "[>] set_android_data_root_path $android_data_root"
+			susfs set_android_data_root_path "$android_data_root" || result=1
 		else
-			echo "[!] /sdcard/Android/data unavailable after ${wait_seconds}s; skipped Android data root setup"
+			echo "[!] $android_data_root unavailable after ${wait_seconds}s; skipped Android data root setup"
 		fi
 	fi
 
