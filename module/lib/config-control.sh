@@ -34,8 +34,11 @@ susaf_config_show() {
 		ADB_MODE AUTOPILOT_SCAN_ON_BOOT AUTOPILOT_APPLY_SAFE SELINUX_HIDE_MODE
 	do
 		value=$(grep "^$key=" "$file" 2>/dev/null | tail -n1 | cut -d= -f2-) || value=
-		[ -n "$value" ] && printf '%s=%s\n' "$key" "$value"
+		if [ -n "$value" ]; then
+			printf '%s=%s\n' "$key" "$value"
+		fi
 	done
+	return 0
 }
 
 susaf_config_set() {
