@@ -81,10 +81,31 @@ async function loadCapabilities() {
 
         const values = {};
         const features = new Set();
+        const registry = [];
+        const unmapped = [];
         result.stdout.split(/\r?\n/).forEach(line => {
             if (!line) return;
             if (line.startsWith('FEATURE=')) {
                 features.add(line.slice('FEATURE='.length).trim());
+                return;
+            }
+            if (line.startsWith('REGISTRY=')) {
+                const [id, mode, available, source, replacement] =
+                    line.slice('REGISTRY='.length).split('|');
+                if (id && mode) {
+                    registry.push({
+                        id,
+                        mode,
+                        available: available === '1',
+                        source: source || '',
+                        replacement: replacement || 'none',
+                    });
+                }
+                return;
+            }
+            if (line.startsWith('UNMAPPED_FEATURE=')) {
+                const feature = line.slice('UNMAPPED_FEATURE='.length).trim();
+                if (feature) unmapped.push(feature);
                 return;
             }
             const split = line.indexOf('=');
@@ -92,7 +113,7 @@ async function loadCapabilities() {
             values[line.slice(0, split).trim()] = line.slice(split + 1).trim();
         });
 
-        capabilityCache = { values, features };
+        capabilityCache = { values, features, registry, unmapped };
         return capabilityCache;
     }).catch(error => {
         console.error('Failed to read SUSFS capabilities:', error);
@@ -109,9 +130,126 @@ function supportsCommand(capabilities, command) {
     return capabilities.values[capabilityKey(command)] !== '0';
 }
 
+const FEATURE_LABELS = {
+    sus_path: 'SUS Path',
+    sus_path_loop: 'SUS Path Loop',
+    sus_map: 'SUS Maps',
+    sus_kstat: 'SUS Kstat',
+    open_redirect: 'Open Redirect',
+    uname: 'Uname Spoof',
+    cmdline_bootconfig: 'Cmdline / Bootconfig Spoof',
+    mount_filter: 'Mount Filtering',
+    kernel_log: 'SUSFS Kernel Logging',
+    avc_log_spoofing: 'AVC Log Spoofing',
+    kernel_umount: 'KernelSU Kernel Umount',
+    sus_mount: 'Legacy SUS Mount',
+    try_umount: 'Try Umount',
+    sus_su: 'SUS_SU',
+    auto_default_mount: 'Auto Default Mount Handling',
+    auto_bind_mount: 'Auto Bind-Mount Handling',
+    auto_try_umount_bind: 'Auto Bind-Mount Try-Umount',
+    hide_symbols: 'SUSFS Symbol Hiding',
+    magic_mount: 'Magic Mount Support',
+    overlayfs: 'OverlayFS Support',
+};
+
+function humanizeFeatureId(id) {
+    if (FEATURE_LABELS[id]) return FEATURE_LABELS[id];
+    return id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function registryModeLabel(entry) {
+    if (entry.mode === 'legacy') return 'Legacy / replaced';
+    if (entry.mode === 'status') return 'Kernel managed';
+    return 'Sus\'AF control';
+}
+
+function registryDetail(entry) {
+    if (entry.mode === 'legacy' && entry.replacement && entry.replacement !== 'none') {
+        return `Replaced by ${humanizeFeatureId(entry.replacement)}`;
+    }
+    if (entry.mode === 'status') return 'Detected from the running kernel; no duplicate Sus\'AF toggle.';
+    return 'Available through the active SUSFS/KernelSU interface.';
+}
+
+function renderCapabilityRegistry(capabilities) {
+    const versionBadge = document.getElementById('capability-version');
+    const summary = document.getElementById('capability-summary');
+    const list = document.getElementById('capability-list');
+    const unmappedBox = document.getElementById('capability-unmapped');
+    if (!versionBadge || !summary || !list || !unmappedBox) return;
+
+    if (!capabilities || capabilities.values.SUSFS_AVAILABLE === '0') {
+        versionBadge.textContent = 'Unavailable';
+        summary.textContent = '';
+        list.innerHTML = '<div class="capability-copy"><small>SUSFS capability data is not available from the installed helper.</small></div>';
+        unmappedBox.hidden = true;
+        return;
+    }
+
+    const version = capabilities.values.SUSFS_VERSION || 'unknown';
+    const variant = capabilities.values.SUSFS_VARIANT || 'unknown';
+    const backend = capabilities.values.UMOUNT_BACKEND || 'unavailable';
+    versionBadge.textContent = version;
+
+    summary.innerHTML = '';
+    [
+        `Variant: ${variant}`,
+        `Umount backend: ${backend}`,
+        `Kernel features: ${capabilities.features.size}`,
+    ].forEach(text => {
+        const chip = document.createElement('span');
+        chip.className = 'capability-chip';
+        chip.textContent = text;
+        summary.appendChild(chip);
+    });
+
+    const modeOrder = { control: 0, status: 1, legacy: 2 };
+    const visibleEntries = capabilities.registry
+        .filter(entry => entry.available || entry.mode === 'legacy')
+        .sort((a, b) => {
+            const modeCompare = (modeOrder[a.mode] ?? 9) - (modeOrder[b.mode] ?? 9);
+            return modeCompare || humanizeFeatureId(a.id).localeCompare(humanizeFeatureId(b.id));
+        });
+
+    list.innerHTML = '';
+    visibleEntries.forEach(entry => {
+        const row = document.createElement('div');
+        row.className = 'capability-row';
+        row.dataset.mode = entry.mode;
+
+        const copy = document.createElement('div');
+        copy.className = 'capability-copy';
+
+        const title = document.createElement('strong');
+        title.textContent = humanizeFeatureId(entry.id);
+        const detail = document.createElement('small');
+        detail.textContent = registryDetail(entry);
+
+        const mode = document.createElement('span');
+        mode.className = 'capability-mode';
+        mode.textContent = registryModeLabel(entry);
+
+        copy.append(title, detail);
+        row.append(copy, mode);
+        list.appendChild(row);
+    });
+
+    if (capabilities.unmapped.length) {
+        unmappedBox.hidden = false;
+        unmappedBox.textContent =
+            `Unmapped kernel feature${capabilities.unmapped.length === 1 ? '' : 's'}: ${capabilities.unmapped.join(', ')}`;
+    } else {
+        unmappedBox.hidden = true;
+        unmappedBox.textContent = '';
+    }
+}
+
 async function applyCapabilityVisibility() {
     const capabilities = await loadCapabilities();
     if (!capabilities) return;
+
+    renderCapabilityRegistry(capabilities);
 
     CONFIG_BOXES.forEach(box => {
         const element = document.getElementById(`box-${box.key}`);
