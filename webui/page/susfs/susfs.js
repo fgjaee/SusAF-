@@ -451,7 +451,10 @@ export function onShow() {
     const actionBtn = document.getElementById('action-btn');
     const forceUpdateButton = document.getElementById('force-update-btn');
     actionBtn.onclick = () => runSusAF('--action');
-    forceUpdateButton.onclick = () => runSusAF('--force-update');
+    forceUpdateButton.onclick = () => {
+        capabilityCache = null;
+        runSusAF('--force-update');
+    };
     refreshBadges();
     loadToggles();
     applyCapabilityVisibility();
