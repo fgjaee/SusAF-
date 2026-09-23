@@ -50,7 +50,7 @@ susfs_variant_value() {
 susfs_has_feature() {
 	feature="$1"
 	[ -n "$feature" ] || return 1
-	susfs_features | awk -v wanted="$feature" '{
+	susfs_features | tr ',;' '  ' | awk -v wanted="$feature" '{
 		for (i = 1; i <= NF; i++) {
 			token = $i
 			gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
@@ -259,7 +259,7 @@ emit_feature_registry() {
 	emit_registry_feature magic_mount CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT
 	emit_registry_feature overlayfs CONFIG_KSU_SUSFS_SUS_OVERLAYFS
 
-	susfs_features | awk '{
+	susfs_features | tr ',;' '  ' | awk '{
 		for (i = 1; i <= NF; i++) {
 			token = $i
 			gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
