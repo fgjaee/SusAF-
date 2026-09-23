@@ -16,6 +16,7 @@ SUSFS_MIN_VERSION="v2.2.0"
 . "$MODDIR/lib/diagnostics.sh"
 . "$MODDIR/lib/backup-restore.sh"
 . "$MODDIR/lib/coverage.sh"
+. "$MODDIR/lib/config-control.sh"
 
 versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
 
@@ -405,6 +406,8 @@ show_help () {
 	printf " --stage-early \t\t\t\tpost-fs-data stage only\n"
 	printf " --stage-late \t\t\t\tboot-completed stage only\n"
 	printf " --status \t\t\t\tshow susfs version / variant / enabled features\n"
+	printf " --config-show \t\t\tshow validated persistent controller settings\n"
+	printf " --config-set KEY=VALUE... \tatomically validate and save controller settings\n"
 	printf " --capabilities \t\t\tmachine-readable kernel/binary capability report\n"
 	printf " --force-update \t\t\tinstall the release-pinned, verified SuSFS binary\n"
 	printf " --export-config \t\t\texport a validated Sus'AF configuration archive\n"
@@ -446,6 +449,8 @@ case "$1" in
 	--stage-early) stage_early; exit ;;
 	--stage-late) stage_late; exit ;;
 	--status) show_status; exit ;;
+	--config-show) susaf_config_show "$PERSISTENT_DIR/config.txt"; exit ;;
+	--config-set) shift; susaf_config_set "$PERSISTENT_DIR/config.txt" "$@"; exit ;;
 	--capabilities) show_capabilities; exit ;;
 	--force-update) update_susfs; exit ;;
 	--export-config) export_susaf_config; exit ;;
