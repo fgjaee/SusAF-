@@ -21,15 +21,32 @@ versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
 
 [ -n "$WEBUI_QUIET" ] && [ "${NO_BANNER:-0}" = "0" ] && banner
 
+susfs_managed_command() {
+	case "$1" in
+		add_sus_path|add_sus_path_loop|add_sus_map|add_sus_mount|add_try_umount|\
+		add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|\
+		set_uname|set_cmdline_or_bootconfig|hide_sus_mnts_for_non_su_procs|\
+		enable_log|enable_avc_log_spoofing)
+			return 0
+			;;
+		*) return 1 ;;
+	esac
+}
+
 susfs() {
 	cmd="$1"
 	case "$cmd" in
 		show|--help) "$SUSFS_BIN" "$@"; return $? ;;
 	esac
-	if ! susfs_has_command "$cmd"; then
+
+	if susfs_managed_command "$cmd" && ! susfs_has_command "$cmd"; then
 		echo "[*] skip unsupported SUSFS command: $cmd"
 		return 0
 	fi
+
+	# Unknown/new commands are deliberately passed through. If a caller has a
+	# typo or upstream changes syntax, surface the real helper error instead of
+	# silently pretending the action succeeded.
 	"$SUSFS_BIN" "$@"
 }
 
@@ -77,7 +94,13 @@ susfs_variant_value() {
 susfs_has_feature() {
 	feature="$1"
 	[ -n "$feature" ] || return 1
-	susfs_features | grep -Fqx "$feature"
+	susfs_features | awk -v wanted="$feature" '{
+		for (i = 1; i <= NF; i++) {
+			token = $i
+			gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
+			if (token == wanted) found = 1
+		}
+	} END { exit(found ? 0 : 1) }'
 }
 
 susfs_has_command() {
