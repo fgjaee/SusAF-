@@ -150,6 +150,129 @@ susfs_preferred_umount_backend() {
 	fi
 }
 
+emit_registry_entry() {
+	id="$1"
+	mode="$2"
+	available="$3"
+	source="$4"
+	replacement="$5"
+	printf 'REGISTRY=%s|%s|%s|%s|%s\n' "$id" "$mode" "$available" "$source" "$replacement"
+}
+
+emit_registry_command() {
+	id="$1"
+	command_name="$2"
+	if susfs_has_command "$command_name"; then
+		available=1
+	else
+		available=0
+	fi
+	emit_registry_entry "$id" control "$available" "command:$command_name" none
+}
+
+emit_registry_feature() {
+	id="$1"
+	feature="$2"
+	if susfs_has_feature "$feature"; then
+		available=1
+	else
+		available=0
+	fi
+	emit_registry_entry "$id" status "$available" "feature:$feature" none
+}
+
+susfs_feature_is_mapped() {
+	case "$1" in
+		CONFIG_KSU_SUSFS|\
+		CONFIG_KSU_SUSFS_SUS_PATH|\
+		CONFIG_KSU_SUSFS_SUS_MAP|\
+		CONFIG_KSU_SUSFS_SUS_MOUNT|\
+		CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT|\
+		CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT|\
+		CONFIG_KSU_SUSFS_SUS_KSTAT|\
+		CONFIG_KSU_SUSFS_TRY_UMOUNT|\
+		CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT|\
+		CONFIG_KSU_SUSFS_SPOOF_UNAME|\
+		CONFIG_KSU_SUSFS_ENABLE_LOG|\
+		CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS|\
+		CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG|\
+		CONFIG_KSU_SUSFS_OPEN_REDIRECT|\
+		CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT|\
+		CONFIG_KSU_SUSFS_SUS_OVERLAYFS|\
+		CONFIG_KSU_SUSFS_SUS_SU)
+			return 0
+			;;
+		*) return 1 ;;
+	esac
+}
+
+emit_feature_registry() {
+	version=$(susfs_version_value)
+	umount_backend=$(susfs_preferred_umount_backend)
+
+	emit_registry_command sus_path add_sus_path
+	emit_registry_command sus_path_loop add_sus_path_loop
+	emit_registry_command sus_map add_sus_map
+	emit_registry_command sus_kstat add_sus_kstat
+	emit_registry_command open_redirect add_open_redirect
+	emit_registry_command uname set_uname
+	emit_registry_command cmdline_bootconfig set_cmdline_or_bootconfig
+	emit_registry_command mount_filter hide_sus_mnts_for_non_su_procs
+	emit_registry_command kernel_log enable_log
+	emit_registry_command avc_log_spoofing enable_avc_log_spoofing
+
+	ksu_bin=$(resolve_ksud_bin 2>/dev/null) || ksu_bin=
+	kernel_umount_available=0
+	if [ -n "$ksu_bin" ]; then
+		case "$(kernel_umount_check_feature "$ksu_bin")" in
+			supported|managed) kernel_umount_available=1 ;;
+		esac
+	fi
+	emit_registry_entry kernel_umount control "$kernel_umount_available" "kernelsu:kernel_umount" none
+
+	if version_ge "$version" "v2.0.0"; then
+		sus_mount_available=0
+		susfs_has_command add_sus_mount && sus_mount_available=1
+		emit_registry_entry sus_mount legacy "$sus_mount_available" "command:add_sus_mount" kernel_managed_mounts
+
+		try_umount_available=0
+		susfs_has_command add_try_umount && try_umount_available=1
+		if [ "$umount_backend" = "kernel_umount" ]; then
+			emit_registry_entry try_umount legacy "$try_umount_available" "command:add_try_umount" kernel_umount
+		else
+			emit_registry_entry try_umount control "$try_umount_available" "command:add_try_umount" none
+		fi
+
+		sus_su_available=0
+		susfs_has_feature CONFIG_KSU_SUSFS_SUS_SU && sus_su_available=1
+		emit_registry_entry sus_su legacy "$sus_su_available" "feature:CONFIG_KSU_SUSFS_SUS_SU" removed_in_susfs_v2
+	else
+		emit_registry_command sus_mount add_sus_mount
+		emit_registry_command try_umount add_try_umount
+		emit_registry_feature sus_su CONFIG_KSU_SUSFS_SUS_SU
+	fi
+
+	emit_registry_feature auto_default_mount CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
+	emit_registry_feature auto_bind_mount CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT
+	emit_registry_feature auto_try_umount_bind CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT
+	emit_registry_feature hide_symbols CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+	emit_registry_feature magic_mount CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT
+	emit_registry_feature overlayfs CONFIG_KSU_SUSFS_SUS_OVERLAYFS
+
+	susfs_features | awk '{
+		for (i = 1; i <= NF; i++) {
+			token = $i
+			gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
+			if (token ~ /^CONFIG_KSU_SUSFS_[A-Z0-9_]+$/ && !seen[token]++) print token
+		}
+	}' | while IFS= read -r feature; do
+		[ -n "$feature" ] || continue
+		if ! susfs_feature_is_mapped "$feature"; then
+			printf 'UNMAPPED_FEATURE=%s\n' "$feature"
+		fi
+	done
+}
+
 show_capabilities() {
 	if [ ! -x "$SUSFS_BIN" ]; then
 		printf 'SUSFS_AVAILABLE=0\n'
@@ -196,4 +319,5 @@ show_capabilities() {
 	fi
 	printf 'KERNEL_UMOUNT=%s\n' "$kernel_umount"
 	printf 'UMOUNT_BACKEND=%s\n' "$(susfs_preferred_umount_backend)"
+	emit_feature_registry
 }
