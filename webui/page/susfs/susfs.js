@@ -1,5 +1,5 @@
 import { exec } from 'kernelsu-alt';
-import { showPrompt, basePath, filePaths, applyFlags, runSusAF, fetchText, updateUIVisibility, writeTextFileAtomic } from '../../utils/util.js';
+import { showPrompt, basePath, moduleDirectory, filePaths, applyFlags, runSusAF, fetchText, updateUIVisibility, writeTextFileAtomic } from '../../utils/util.js';
 import { getString } from '../../utils/language.js';
 import { openEditor } from '../../utils/editor.js';
 import { FileSelector } from '../../utils/file_selector.js';
@@ -15,48 +15,120 @@ const CONFIG_BOXES = [
         title: 'susfs_sus_paths_title',
         description: 'susfs_sus_paths_desc',
         applyLabel: 'box_apply',
+        command: 'add_sus_path',
     },
     {
         key: 'sus_paths_loop',
         title: 'susfs_sus_paths_loop_title',
         description: 'susfs_sus_paths_loop_desc',
         applyLabel: 'box_apply',
+        command: 'add_sus_path_loop',
     },
     {
         key: 'sus_maps',
         title: 'susfs_sus_maps_title',
         description: 'susfs_sus_maps_desc',
         applyLabel: 'box_apply',
+        command: 'add_sus_map',
     },
     {
         key: 'kstat_paths',
         title: 'susfs_kstat_paths_title',
         description: 'susfs_kstat_paths_desc',
         applyLabel: 'box_stage',
+        command: 'add_sus_kstat',
     },
     {
         key: 'open_redirect',
         title: 'susfs_open_redirect_title',
         description: 'susfs_open_redirect_desc',
         applyLabel: 'box_apply',
+        command: 'add_open_redirect',
     },
     {
         key: 'uname',
         title: 'susfs_uname_title',
         description: 'susfs_uname_desc',
         applyLabel: 'box_apply',
+        command: 'set_uname',
     },
     {
         key: 'cmdline_bootconfig',
         title: 'susfs_cmdline_title',
         description: 'susfs_cmdline_desc',
         applyLabel: 'box_apply',
+        command: 'set_cmdline_or_bootconfig',
     },
 ];
 
 const pencilIcon = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px"><path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Z"/></svg>`;
 const playIcon = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px"><path d="M320-200v-560l440 280-440 280Z"/></svg>`;
 const folderIcon = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h240l80 80h320q33 0 56.5 23.5T880-640H447l-80-80H160v480l96-320h684L837-217q-8 26-29.5 41.5T760-160H160Z"/></svg>`;
+
+let capabilityCache = null;
+let capabilityPromise = null;
+
+function capabilityKey(command) {
+    return `CMD_${command.toUpperCase()}`;
+}
+
+async function loadCapabilities() {
+    if (capabilityCache) return capabilityCache;
+    if (capabilityPromise) return capabilityPromise;
+
+    capabilityPromise = exec(`sh "${moduleDirectory}/SusAF.sh" --capabilities`).then(result => {
+        if (result.errno !== 0 || !result.stdout.trim()) return null;
+
+        const values = {};
+        const features = new Set();
+        result.stdout.split(/\r?\n/).forEach(line => {
+            if (!line) return;
+            if (line.startsWith('FEATURE=')) {
+                features.add(line.slice('FEATURE='.length).trim());
+                return;
+            }
+            const split = line.indexOf('=');
+            if (split <= 0) return;
+            values[line.slice(0, split).trim()] = line.slice(split + 1).trim();
+        });
+
+        capabilityCache = { values, features };
+        return capabilityCache;
+    }).catch(error => {
+        console.error('Failed to read SUSFS capabilities:', error);
+        return null;
+    }).finally(() => {
+        capabilityPromise = null;
+    });
+
+    return capabilityPromise;
+}
+
+function supportsCommand(capabilities, command) {
+    if (!capabilities || !command) return true;
+    return capabilities.values[capabilityKey(command)] !== '0';
+}
+
+async function applyCapabilityVisibility() {
+    const capabilities = await loadCapabilities();
+    if (!capabilities) return;
+
+    CONFIG_BOXES.forEach(box => {
+        const element = document.getElementById(`box-${box.key}`);
+        if (element) element.hidden = !supportsCommand(capabilities, box.command);
+    });
+
+    TOGGLE_ROWS.forEach(({ id, command, capability }) => {
+        const row = document.getElementById(id);
+        if (!row) return;
+        const supported = capability
+            ? capabilities.values[capability] !== '0'
+            : supportsCommand(capabilities, command);
+        row.hidden = !supported;
+        const toggle = row.querySelector('md-switch');
+        if (toggle) toggle.disabled = !supported;
+    });
+}
 
 /**
  * Count non-comment, non-blank lines in a config file under PERSISTENT_DIR.
@@ -140,11 +212,11 @@ async function applyCustomFile(key) {
 // Toggles box
 
 const TOGGLE_ROWS = [
-    { id: 'toggle-hide-mnts', key: 'HIDE_SUS_MNTS_NON_SU' },
-    { id: 'toggle-hide-mnts-late', key: 'HIDE_SUS_MNTS_LATE' },
-    { id: 'toggle-allow-broad-umount', key: 'ALLOW_BROAD_KERNEL_UMOUNT' },
-    { id: 'toggle-enable-log', key: 'ENABLE_LOG' },
-    { id: 'toggle-avc-spoof', key: 'ENABLE_AVC_LOG_SPOOFING' },
+    { id: 'toggle-hide-mnts', key: 'HIDE_SUS_MNTS_NON_SU', command: 'hide_sus_mnts_for_non_su_procs' },
+    { id: 'toggle-hide-mnts-late', key: 'HIDE_SUS_MNTS_LATE', command: 'hide_sus_mnts_for_non_su_procs' },
+    { id: 'toggle-allow-broad-umount', key: 'ALLOW_BROAD_KERNEL_UMOUNT', capability: 'KERNEL_UMOUNT' },
+    { id: 'toggle-enable-log', key: 'ENABLE_LOG', command: 'enable_log' },
+    { id: 'toggle-avc-spoof', key: 'ENABLE_AVC_LOG_SPOOFING', command: 'enable_avc_log_spoofing' },
 ];
 
 async function loadToggles() {
@@ -244,6 +316,7 @@ export function onShow() {
     forceUpdateButton.onclick = () => runSusAF('--force-update');
     refreshBadges();
     loadToggles();
+    applyCapabilityVisibility();
 }
 
 export function onHide() {
