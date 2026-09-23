@@ -242,8 +242,7 @@ apply_open_redirect() {
 		scheme=$(echo "$line" | awk '{print $3}')
 		[ -z "$target" ] || [ -z "$redirect" ] || [ -z "$scheme" ] && continue
 		[ -e "$target" ] && [ -e "$redirect" ] || { echo "[!] skip: $target -> $redirect (missing endpoint)"; continue; }
-		echo "[>] add_open_redirect $target -> $redirect (scheme $scheme)"
-		susfs add_open_redirect "$target" "$redirect" "$scheme"
+		susfs_add_open_redirect "$target" "$redirect" "$scheme"
 	done
 }
 
@@ -344,8 +343,8 @@ apply_toggles() {
 	case "$hide_mnts" in
 	"") ;;
 	0|1)
-		echo "[>] hide_sus_mnts_for_non_su_procs $hide_mnts ($stage)"
-		susfs hide_sus_mnts_for_non_su_procs "$hide_mnts" || result=1
+		echo "[*] mount filter policy: $hide_mnts ($stage)"
+		susfs_set_mount_filter "$hide_mnts" || result=1
 		;;
 	*) echo "[x] invalid hide-mounts value: $hide_mnts"; result=1 ;;
 	esac
@@ -377,6 +376,7 @@ stage_late() {
 	echo "[+] stage: late (boot-completed)"
 	apply_kernel_umount_feature
 	apply_kernel_umount_mounts
+	susfs_prepare_path_roots || true
 	apply_sus_paths
 	apply_sus_paths_loop
 	apply_sus_maps
