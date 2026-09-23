@@ -63,28 +63,76 @@ susfs_has_command() {
 	command_name="$1"
 	[ -n "$command_name" ] || return 1
 
-	# Sidex's universal helper intentionally exposes only commands supported by
-	# the detected kernel in --help.  Prefer that live contract when present.
+	# Sidex's universal helper exposes only commands supported by the detected
+	# kernel in --help.  When that contract is available, it is authoritative.
 	help_text=$(susfs_help)
-	if [ -n "$help_text" ] && printf '%s\n' "$help_text" | grep -Eq "(^|[^[:alnum:]_])${command_name}([^[:alnum:]_]|$)"; then
-		return 0
+	if [ -n "$help_text" ]; then
+		printf '%s\n' "$help_text" | grep -Eq "(^|[^[:alnum:]_])${command_name}([^[:alnum:]_]|$)"
+		return $?
 	fi
 
-	# Feature/version fallbacks keep Sus'AF usable with older helpers whose
-	# --help output is incomplete.
+	# Older helpers may not provide useful --help output.  Use the runtime
+	# feature list/version when available, but treat totally unknown capability
+	# state as pass-through rather than falsely marking a command unsupported.
+	features=$(susfs_features)
+	version=$(susfs_version_value)
 	case "$command_name" in
-		add_sus_path) susfs_has_feature CONFIG_KSU_SUSFS_SUS_PATH ;;
-		add_sus_map) susfs_has_feature CONFIG_KSU_SUSFS_SUS_MAP ;;
-		add_sus_kstat|add_sus_kstat_statically|update_sus_kstat) susfs_has_feature CONFIG_KSU_SUSFS_SUS_KSTAT ;;
-		add_open_redirect) susfs_has_feature CONFIG_KSU_SUSFS_OPEN_REDIRECT ;;
-		set_uname) susfs_has_feature CONFIG_KSU_SUSFS_SPOOF_UNAME ;;
-		set_cmdline_or_bootconfig) susfs_has_feature CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG ;;
-		enable_log) susfs_has_feature CONFIG_KSU_SUSFS_ENABLE_LOG ;;
-		add_try_umount) susfs_has_feature CONFIG_KSU_SUSFS_TRY_UMOUNT ;;
-		add_sus_mount) susfs_has_feature CONFIG_KSU_SUSFS_SUS_MOUNT ;;
-		add_sus_path_loop) version_ge "$(susfs_version_value)" "v1.5.9" ;;
-		hide_sus_mnts_for_non_su_procs) version_ge "$(susfs_version_value)" "v1.5.7" ;;
-		enable_avc_log_spoofing) version_ge "$(susfs_version_value)" "v1.5.9" ;;
+		add_sus_path)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_SUS_PATH
+			;;
+		add_sus_map)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_SUS_MAP
+			;;
+		add_sus_kstat|add_sus_kstat_statically|update_sus_kstat)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_SUS_KSTAT
+			;;
+		add_open_redirect)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_OPEN_REDIRECT
+			;;
+		set_uname)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_SPOOF_UNAME
+			;;
+		set_cmdline_or_bootconfig)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+			;;
+		enable_log)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_ENABLE_LOG
+			;;
+		add_try_umount)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_TRY_UMOUNT
+			;;
+		add_sus_mount)
+			[ -z "$features" ] && [ -z "$version" ] && return 0
+			susfs_has_feature CONFIG_KSU_SUSFS_SUS_MOUNT
+			;;
+		add_sus_path_loop)
+			[ -z "$version" ] && return 0
+			version_ge "$version" "v1.5.9"
+			;;
+		hide_sus_mnts_for_non_su_procs)
+			[ -z "$version" ] && return 0
+			version_ge "$version" "v1.5.7"
+			;;
+		hide_sus_mnts_for_all_procs)
+			[ -z "$version" ] && return 0
+			version_ge "$version" "v2.0.0"
+			;;
+		set_sdcard_root_path|set_android_data_root_path)
+			[ -z "$version" ] && return 0
+			version_ge "$version" "v1.5.8"
+			;;
+		enable_avc_log_spoofing)
+			[ -z "$version" ] && return 0
+			version_ge "$version" "v1.5.9"
+			;;
 		*) return 1 ;;
 	esac
 }
@@ -93,7 +141,8 @@ susfs_managed_command() {
 	case "$1" in
 		add_sus_path|add_sus_path_loop|add_sus_map|add_sus_mount|add_try_umount|\
 		add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|\
-		set_uname|set_cmdline_or_bootconfig|hide_sus_mnts_for_non_su_procs|\
+		set_uname|set_cmdline_or_bootconfig|set_sdcard_root_path|set_android_data_root_path|\
+		hide_sus_mnts_for_non_su_procs|hide_sus_mnts_for_all_procs|\
 		enable_log|enable_avc_log_spoofing)
 			return 0
 			;;
@@ -115,6 +164,95 @@ susfs() {
 	# Unknown/new commands pass through.  Typos and changed upstream syntax
 	# should surface the helper's real error rather than become fake success.
 	"$SUSFS_BIN" "$@"
+}
+
+susfs_mount_filter_backend() {
+	version=$(susfs_version_value)
+
+	if version_ge "$version" "v2.0.0" && susfs_has_command hide_sus_mnts_for_all_procs; then
+		printf 'hide_sus_mnts_for_all_procs\n'
+		return 0
+	fi
+	if susfs_has_command hide_sus_mnts_for_non_su_procs; then
+		printf 'hide_sus_mnts_for_non_su_procs\n'
+		return 0
+	fi
+	if susfs_has_command hide_sus_mnts_for_all_procs; then
+		printf 'hide_sus_mnts_for_all_procs\n'
+		return 0
+	fi
+	printf 'unavailable\n'
+}
+
+susfs_set_mount_filter() {
+	value="$1"
+	backend=$(susfs_mount_filter_backend)
+	case "$backend" in
+		hide_sus_mnts_for_all_procs|hide_sus_mnts_for_non_su_procs)
+			echo "[>] $backend $value"
+			susfs "$backend" "$value"
+			;;
+		*)
+			echo "[*] mount filtering is not supported by this SUSFS kernel/helper"
+			return 0
+			;;
+	esac
+}
+
+susfs_prepare_path_roots() {
+	result=0
+
+	if susfs_has_command set_sdcard_root_path; then
+		if [ -d /sdcard ]; then
+			echo "[>] set_sdcard_root_path /sdcard"
+			susfs set_sdcard_root_path /sdcard || result=1
+		else
+			echo "[!] /sdcard is unavailable; skipped SUS_PATH sdcard root setup"
+		fi
+	fi
+
+	if susfs_has_command set_android_data_root_path; then
+		wait_seconds="${SUSAF_ANDROID_DATA_WAIT_SECONDS:-30}"
+		case "$wait_seconds" in
+			''|*[!0-9]*) wait_seconds=30 ;;
+		esac
+		elapsed=0
+		while [ ! -d /sdcard/Android/data ] && [ "$elapsed" -lt "$wait_seconds" ]; do
+			sleep 1
+			elapsed=$((elapsed + 1))
+		done
+		if [ -d /sdcard/Android/data ]; then
+			echo "[>] set_android_data_root_path /sdcard/Android/data"
+			susfs set_android_data_root_path /sdcard/Android/data || result=1
+		else
+			echo "[!] /sdcard/Android/data unavailable after ${wait_seconds}s; skipped Android data root setup"
+		fi
+	fi
+
+	return "$result"
+}
+
+susfs_add_open_redirect() {
+	target="$1"
+	redirect="$2"
+	scheme="${3:-2}"
+	version=$(susfs_version_value)
+
+	case "$scheme" in
+		0|1|2|3|4) ;;
+		*)
+			echo "[x] invalid Open Redirect uid scheme: $scheme"
+			return 1
+			;;
+	esac
+
+	if version_ge "$version" "v2.1.0"; then
+		echo "[>] add_open_redirect $target -> $redirect (scheme $scheme)"
+		susfs add_open_redirect "$target" "$redirect" "$scheme"
+	else
+		echo "[>] add_open_redirect $target -> $redirect (legacy two-argument interface)"
+		susfs add_open_redirect "$target" "$redirect"
+	fi
 }
 
 emit_susfs_command_capability() {
@@ -217,7 +355,11 @@ emit_feature_registry() {
 	emit_registry_command open_redirect add_open_redirect
 	emit_registry_command uname set_uname
 	emit_registry_command cmdline_bootconfig set_cmdline_or_bootconfig
-	emit_registry_command mount_filter hide_sus_mnts_for_non_su_procs
+	mount_filter_backend=$(susfs_mount_filter_backend)
+	[ "$mount_filter_backend" = unavailable ] && mount_filter_available=0 || mount_filter_available=1
+	emit_registry_entry mount_filter control "$mount_filter_available" "adapter:$mount_filter_backend" none
+	emit_registry_command sdcard_root set_sdcard_root_path
+	emit_registry_command android_data_root set_android_data_root_path
 	emit_registry_command kernel_log enable_log
 	emit_registry_command avc_log_spoofing enable_avc_log_spoofing
 
@@ -304,7 +446,8 @@ show_capabilities() {
 	for command_name in \
 		add_sus_path add_sus_path_loop add_sus_map add_sus_mount add_try_umount \
 		add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect \
-		set_uname set_cmdline_or_bootconfig hide_sus_mnts_for_non_su_procs \
+		set_uname set_cmdline_or_bootconfig set_sdcard_root_path set_android_data_root_path \
+		hide_sus_mnts_for_non_su_procs hide_sus_mnts_for_all_procs \
 		enable_log enable_avc_log_spoofing
 	do
 		emit_susfs_command_capability "$command_name"
@@ -319,5 +462,6 @@ show_capabilities() {
 	fi
 	printf 'KERNEL_UMOUNT=%s\n' "$kernel_umount"
 	printf 'UMOUNT_BACKEND=%s\n' "$(susfs_preferred_umount_backend)"
+	printf 'MOUNT_FILTER_BACKEND=%s\n' "$(susfs_mount_filter_backend)"
 	emit_feature_registry
 }
