@@ -181,7 +181,7 @@ generate_diagnostics() {
 	if [ -x "$SUSFS_BIN" ]; then
 		susfs_version=$(susfs_version_value)
 		susfs_variant=$(susfs_variant_value)
-		features=$(susfs_features | awk '{
+		features=$(susfs_features | tr ',;' '  ' | awk '{
 			for (i = 1; i <= NF; i++) {
 				token = $i
 				gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
@@ -190,7 +190,7 @@ generate_diagnostics() {
 				}
 			}
 		} END { print value }')
-		feature_count=$(susfs_features | awk '{
+		feature_count=$(susfs_features | tr ',;' '  ' | awk '{
 			for (i = 1; i <= NF; i++) {
 				token = $i
 				gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
