@@ -138,6 +138,8 @@ const FEATURE_LABELS = {
     open_redirect: 'Open Redirect',
     uname: 'Uname Spoof',
     cmdline_bootconfig: 'Cmdline / Bootconfig Spoof',
+    sdcard_root: 'SUS_PATH SD Card Root',
+    android_data_root: 'SUS_PATH Android Data Root',
     mount_filter: 'Mount Filtering',
     kernel_log: 'SUSFS Kernel Logging',
     avc_log_spoofing: 'AVC Log Spoofing',
@@ -193,9 +195,11 @@ function renderCapabilityRegistry(capabilities) {
     versionBadge.textContent = version;
 
     summary.innerHTML = '';
+    const mountFilterBackend = capabilities.values.MOUNT_FILTER_BACKEND || 'unavailable';
     [
         `Variant: ${variant}`,
         `Umount backend: ${backend}`,
+        `Mount filter: ${mountFilterBackend}`,
         `Kernel features: ${capabilities.features.size}`,
     ].forEach(text => {
         const chip = document.createElement('span');
