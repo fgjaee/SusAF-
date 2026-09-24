@@ -20,7 +20,7 @@ make_helper() {
 	variant="$3"
 	cat > "$path" <<EOF
 #!/bin/sh
-case "$1 $2" in
+case "\$1 \$2" in
 	'show version') printf '%s\n' '$version' ;;
 	'show variant') printf '%s\n' '$variant' ;;
 	*) exit 0 ;;
