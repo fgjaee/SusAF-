@@ -6,12 +6,10 @@ MODDIR="$MODULE_DIR"
 USER_SCRIPTS_DIR="$PERSISTENT_DIR/scripts"
 POSTFS_SCRIPTS_FILE="$PERSISTENT_DIR/scripts_postfs.txt"
 BOOTCOMPLETED_SCRIPTS_FILE="$PERSISTENT_DIR/scripts_bootcompleted.txt"
-SUSFS_BIN="${SUSAF_SUSFS_BIN:-$DEST_BIN_DIR/ksu_susfs}"
-[ -n "${SUSAF_SUSFS_BIN:-}" ] || [ -x "$SUSFS_BIN" ] || \
-	[ ! -x "$SUSFS_BUNDLED_BIN" ] || SUSFS_BIN="$SUSFS_BUNDLED_BIN"
 SUSFS_MIN_VERSION="v2.2.0"
 
 . "$MODDIR/utils.sh"
+select_susfs_binary "$SUSFS_MIN_VERSION" || true
 . "$MODDIR/lib/kernel-umount.sh"
 . "$MODDIR/lib/diagnostics.sh"
 . "$MODDIR/lib/backup-restore.sh"
