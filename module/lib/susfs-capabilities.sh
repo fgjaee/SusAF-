@@ -67,8 +67,24 @@ susfs_has_command() {
 	# kernel in --help.  When that contract is available, it is authoritative.
 	help_text=$(susfs_help)
 	if [ -n "$help_text" ]; then
-		printf '%s\n' "$help_text" | grep -Eq "(^|[^[:alnum:]_])${command_name}([^[:alnum:]_]|$)"
-		return $?
+		if printf '%s\n' "$help_text" | grep -Eq "(^|[^[:alnum:]_])${command_name}([^[:alnum:]_]|$)"; then
+			return 0
+		fi
+
+		# Some compatible helpers (including the shared helper layout seen with
+		# BRENE) omit the SUS_PATH root-initialization setters from --help even
+		# though the v1.5.8+ SUSFS ABI still exposes them.  These two commands are
+		# prerequisites for SUS_PATH, so derive them from the live kernel feature
+		# and ABI version instead of treating --help as exhaustive.
+		case "$command_name" in
+			set_sdcard_root_path|set_android_data_root_path)
+				version=$(susfs_version_value)
+				susfs_has_feature CONFIG_KSU_SUSFS_SUS_PATH &&
+					version_ge "$version" "v1.5.8"
+				return $?
+				;;
+			*) return 1 ;;
+		esac
 	fi
 
 	# Older helpers may not provide useful --help output.  Use the runtime
