@@ -425,7 +425,7 @@ show_capabilities() {
 	if [ ! -x "$SUSFS_BIN" ]; then
 		printf 'SUSFS_AVAILABLE=0\n'
 		printf 'SUSFS_BINARY=%s\n' "$SUSFS_BIN"
-	printf 'SUSFS_SOURCE=%s\n' "${SUSFS_BIN_SOURCE:-unknown}"
+		printf 'SUSFS_SOURCE=%s\n' "${SUSFS_BIN_SOURCE:-unknown}"
 		printf 'UMOUNT_BACKEND=unavailable\n'
 		return 0
 	fi
@@ -437,6 +437,7 @@ show_capabilities() {
 	[ -n "$version" ] && available=1 || available=0
 	printf 'SUSFS_AVAILABLE=%s\n' "$available"
 	printf 'SUSFS_BINARY=%s\n' "$SUSFS_BIN"
+	printf 'SUSFS_SOURCE=%s\n' "${SUSFS_BIN_SOURCE:-unknown}"
 	printf 'SUSFS_VERSION=%s\n' "$version"
 	printf 'SUSFS_VARIANT=%s\n' "$variant"
 
