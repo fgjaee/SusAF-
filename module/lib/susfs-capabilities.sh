@@ -134,11 +134,11 @@ susfs_has_command() {
 			;;
 		hide_sus_mnts_for_non_su_procs)
 			[ -z "$version" ] && return 0
-			version_ge "$version" "v1.5.7"
+			version_ge "$version" "v2.0.0"
 			;;
 		hide_sus_mnts_for_all_procs)
 			[ -z "$version" ] && return 0
-			version_ge "$version" "v2.0.0"
+			version_ge "$version" "v1.5.8" && ! version_ge "$version" "v2.0.0"
 			;;
 		set_sdcard_root_path|set_android_data_root_path)
 			[ -z "$version" ] && return 0
@@ -184,17 +184,26 @@ susfs() {
 susfs_mount_filter_backend() {
 	version=$(susfs_version_value)
 
-	if version_ge "$version" "v2.0.0" && susfs_has_command hide_sus_mnts_for_all_procs; then
-		printf 'hide_sus_mnts_for_all_procs\n'
-		return 0
-	fi
-	if susfs_has_command hide_sus_mnts_for_non_su_procs; then
-		printf 'hide_sus_mnts_for_non_su_procs\n'
-		return 0
-	fi
-	if susfs_has_command hide_sus_mnts_for_all_procs; then
-		printf 'hide_sus_mnts_for_all_procs\n'
-		return 0
+	# SUSFS v2 switched the mount-filter command name.  Prefer the ABI-native
+	# command first, then fall back to whatever the live helper actually exposes.
+	if version_ge "$version" "v2.0.0"; then
+		if susfs_has_command hide_sus_mnts_for_non_su_procs; then
+			printf 'hide_sus_mnts_for_non_su_procs\n'
+			return 0
+		fi
+		if susfs_has_command hide_sus_mnts_for_all_procs; then
+			printf 'hide_sus_mnts_for_all_procs\n'
+			return 0
+		fi
+	else
+		if susfs_has_command hide_sus_mnts_for_all_procs; then
+			printf 'hide_sus_mnts_for_all_procs\n'
+			return 0
+		fi
+		if susfs_has_command hide_sus_mnts_for_non_su_procs; then
+			printf 'hide_sus_mnts_for_non_su_procs\n'
+			return 0
+		fi
 	fi
 	printf 'unavailable\n'
 }
