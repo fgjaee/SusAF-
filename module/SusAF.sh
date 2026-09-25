@@ -126,7 +126,7 @@ apply_list() {
 	default="$1"; cmd="$2"; mode="$3"; file="${4:-$default}"
 
 	if [ -f "$file" ]; then
-		tmp="${file}.tmp.$$"
+		tmp="${file}.tmp.$"
 		busybox awk '
 			/^[[:space:]]*#/ { print; next }
 			/^[[:space:]]*$/ { next }
@@ -136,13 +136,26 @@ apply_list() {
 	fi
 
 	list=$(read_list "$file" 2>/dev/null) || list=
-	[ -z "$list" ] && return
-	echo "$list" | while IFS= read -r p; do
+	[ -z "$list" ] && return 0
+
+	list_tmp="$PERSISTENT_DIR/.apply-list.$"
+	printf '%s\n' "$list" > "$list_tmp" || return 1
+	status=0
+	while IFS= read -r p || [ -n "$p" ]; do
 		if [ "$mode" = "1" ] && [ ! -e "$p" ]; then echo "[!] skip missing path: $p"; continue; fi
 		if [ "$mode" = "2" ] && [ ! -e "$p" ]; then continue; fi
 		echo "[>] $cmd $p"
-		susfs "$cmd" "$p"
-	done
+		if ! susfs "$cmd" "$p"; then
+			rc=$?
+			# POSIX ! inverts the status, so recover a stable nonzero marker for
+			# the aggregate result while continuing to test remaining entries.
+			[ "$rc" -ne 0 ] || rc=1
+			echo "[x] $cmd failed for: $p"
+			status=1
+		fi
+	done < "$list_tmp"
+	rm -f "$list_tmp"
+	return "$status"
 }
 
 append_to_default() {
