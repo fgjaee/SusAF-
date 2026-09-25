@@ -134,7 +134,7 @@ apply_list() {
 	default="$1"; cmd="$2"; mode="$3"; file="${4:-$default}"
 
 	if [ -f "$file" ]; then
-		tmp="${file}.tmp.$"
+		tmp="${file}.tmp.$$"
 		susaf_awk '
 			/^[[:space:]]*#/ { print; next }
 			/^[[:space:]]*$/ { next }
@@ -146,7 +146,7 @@ apply_list() {
 	list=$(read_list "$file" 2>/dev/null) || list=
 	[ -z "$list" ] && return 0
 
-	list_tmp="$PERSISTENT_DIR/.apply-list.$"
+	list_tmp="$PERSISTENT_DIR/.apply-list.$$"
 	printf '%s\n' "$list" > "$list_tmp" || return 1
 	status=0
 	while IFS= read -r p || [ -n "$p" ]; do
