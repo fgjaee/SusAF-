@@ -15,15 +15,16 @@ case "$1" in
 		case "$2" in
 			version) echo v2.3.0 ;;
 			variant) echo ReSukiSU ;;
-			enabled_features) echo 'CONFIG_KSU_SUSFS_SUS_KSTAT CONFIG_KSU_SUSFS_ENABLE_LOG' ;;
+			enabled_features) echo 'CONFIG_KSU_SUSFS_SUS_PATH CONFIG_KSU_SUSFS_SUS_KSTAT CONFIG_KSU_SUSFS_ENABLE_LOG' ;;
 			*) exit 2 ;;
 		esac
 		;;
 	--help)
-		echo 'add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect set_cmdline_or_bootconfig hide_sus_mnts_for_non_su_procs enable_log enable_avc_log_spoofing'
+		echo 'add_sus_path add_sus_path_loop add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect set_cmdline_or_bootconfig hide_sus_mnts_for_non_su_procs enable_log enable_avc_log_spoofing'
 		;;
 	*)
 		printf '%s\n' "$*" >> "$SUSAF_FAKE_SUSFS_LOG"
+		[ -n "${SUSAF_FAKE_FAIL_ARG:-}" ] && [ "${2:-}" = "$SUSAF_FAKE_FAIL_ARG" ] && exit 9
 		;;
 esac
 EOF
@@ -108,5 +109,25 @@ NO_BANNER=1 sh "$MODULE_DIR/SusAF.sh" --apply-toggles current >/dev/null
 grep -Fqx 'hide_sus_mnts_for_non_su_procs 0' "$TEST_ROOT/susfs.log"
 grep -Fqx 'enable_log 0' "$TEST_ROOT/susfs.log"
 grep -Fqx 'enable_avc_log_spoofing 1' "$TEST_ROOT/susfs.log"
+
+: > "$TEST_ROOT/susfs.log"
+mkdir -p "$TEST_ROOT/path-ok-1" "$TEST_ROOT/path-fail" "$TEST_ROOT/path-ok-2"
+printf '%s\n%s\n%s\n' \
+	"$TEST_ROOT/path-ok-1" "$TEST_ROOT/path-fail" "$TEST_ROOT/path-ok-2" \
+	> "$PERSISTENT_DIR/sus_paths.txt"
+set +e
+SUSAF_MODULE_DIR="$MODULE_DIR" \
+SUSAF_PERSISTENT_DIR="$PERSISTENT_DIR" \
+SUSAF_SUSFS_BIN="$TEST_ROOT/bin/ksu_susfs" \
+SUSAF_FAKE_SUSFS_LOG="$TEST_ROOT/susfs.log" \
+SUSAF_FAKE_FAIL_ARG="$TEST_ROOT/path-fail" \
+NO_BANNER=1 sh "$MODULE_DIR/SusAF.sh" --apply-sus-paths >"$TEST_ROOT/apply-paths.out" 2>&1
+apply_status=$?
+set -e
+[ "$apply_status" -ne 0 ]
+grep -Fqx "add_sus_path $TEST_ROOT/path-ok-1" "$TEST_ROOT/susfs.log"
+grep -Fqx "add_sus_path $TEST_ROOT/path-fail" "$TEST_ROOT/susfs.log"
+grep -Fqx "add_sus_path $TEST_ROOT/path-ok-2" "$TEST_ROOT/susfs.log"
+grep -Fqx "[x] add_sus_path failed for: $TEST_ROOT/path-fail" "$TEST_ROOT/apply-paths.out"
 
 echo "config-action tests passed"
