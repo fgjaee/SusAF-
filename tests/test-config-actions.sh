@@ -24,7 +24,10 @@ case "$1" in
 		;;
 	*)
 		printf '%s\n' "$*" >> "$SUSAF_FAKE_SUSFS_LOG"
-		[ -n "${SUSAF_FAKE_FAIL_ARG:-}" ] && [ "${2:-}" = "$SUSAF_FAKE_FAIL_ARG" ] && exit 9
+		if [ -n "${SUSAF_FAKE_FAIL_ARG:-}" ] && [ "${2:-}" = "$SUSAF_FAKE_FAIL_ARG" ]; then
+			exit 9
+		fi
+		exit 0
 		;;
 esac
 EOF
