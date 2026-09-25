@@ -320,11 +320,27 @@ function buildBox(box) {
  * @returns {Promise<void>}
  */
 async function refreshBadges() {
-    for (const box of CONFIG_BOXES) {
-        const count = await countEntries(filePaths[box.key]);
-        const badge = document.getElementById(`badge-${box.key}`);
-        if (badge) badge.textContent = getString('box_entry_count', count);
+    const commands = CONFIG_BOXES.map(box => {
+        const fileName = filePaths[box.key];
+        return `printf '%s=' '${box.key}'; sed 's/#.*//' "${basePath}/${fileName}" 2>/dev/null | grep -c '[^[:space:]]' || true`;
+    });
+    const result = await exec(commands.join('; '));
+    const counts = new Map();
+
+    if (result.errno === 0 || result.stdout) {
+        result.stdout.split(/\r?\n/).forEach(line => {
+            const split = line.indexOf('=');
+            if (split <= 0) return;
+            const key = line.slice(0, split).trim();
+            const count = parseInt(line.slice(split + 1).trim(), 10);
+            counts.set(key, Number.isFinite(count) ? count : 0);
+        });
     }
+
+    CONFIG_BOXES.forEach(box => {
+        const badge = document.getElementById(`badge-${box.key}`);
+        if (badge) badge.textContent = getString('box_entry_count', counts.get(box.key) ?? 0);
+    });
 }
 
 /**
