@@ -122,12 +122,20 @@ run_script() {
 	echo "[+] exit code: $?"
 }
 
+susaf_awk() {
+	if command -v busybox >/dev/null 2>&1; then
+		busybox awk "$@"
+	else
+		awk "$@"
+	fi
+}
+
 apply_list() {
 	default="$1"; cmd="$2"; mode="$3"; file="${4:-$default}"
 
 	if [ -f "$file" ]; then
 		tmp="${file}.tmp.$"
-		busybox awk '
+		susaf_awk '
 			/^[[:space:]]*#/ { print; next }
 			/^[[:space:]]*$/ { next }
 			!seen[$0]++
@@ -173,7 +181,7 @@ append_to_default() {
 	cat "$src" >> "$default"
 
 	tmp="${default}.tmp.$$"
-	busybox awk '
+	susaf_awk '
 		/^[[:space:]]*#/ { print; next }
 		!seen[$0]++
 	' "$default" > "$tmp" && {
