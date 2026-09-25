@@ -115,7 +115,7 @@ susfs_prepare_path_roots >/dev/null
 
 : > "$SUSAF_FAKE_SUSFS_LOG"
 susfs_set_mount_filter 1 >/dev/null
-grep -Fqx 'hide_sus_mnts_for_all_procs 1' "$SUSAF_FAKE_SUSFS_LOG"
+grep -Fqx 'hide_sus_mnts_for_non_su_procs 1' "$SUSAF_FAKE_SUSFS_LOG"
 
 : > "$SUSAF_FAKE_SUSFS_LOG"
 susfs_add_open_redirect /original /redirected 4 >/dev/null
@@ -160,7 +160,7 @@ grep -Fqx 'REGISTRY=sus_su|status|1|feature:CONFIG_KSU_SUSFS_SUS_SU|none' "$TEST
 
 : > "$SUSAF_FAKE_SUSFS_LOG"
 susfs_set_mount_filter 1 >/dev/null
-grep -Fqx 'hide_sus_mnts_for_non_su_procs 1' "$SUSAF_FAKE_SUSFS_LOG"
+grep -Fqx 'hide_sus_mnts_for_all_procs 1' "$SUSAF_FAKE_SUSFS_LOG"
 
 : > "$SUSAF_FAKE_SUSFS_LOG"
 susfs_add_open_redirect /original /redirected 4 >/dev/null
