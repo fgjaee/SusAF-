@@ -71,7 +71,19 @@ susfs_has_command() {
 			return 0
 		fi
 
-		return 1
+		# The external-root setters existed only in the transitional SUSFS ABI:
+		# v1.5.8 through v2.0.x.  They were removed from v2.1.0+, where SUS_PATH
+		# no longer needs this userspace initialization.
+		case "$command_name" in
+			set_sdcard_root_path|set_android_data_root_path)
+				version=$(susfs_version_value)
+				susfs_has_feature CONFIG_KSU_SUSFS_SUS_PATH &&
+					version_ge "$version" "v1.5.8" &&
+					! version_ge "$version" "v2.1.0"
+				return $?
+				;;
+			*) return 1 ;;
+		esac
 	fi
 
 	# Older helpers may not provide useful --help output.  Use the runtime
