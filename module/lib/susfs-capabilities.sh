@@ -71,20 +71,7 @@ susfs_has_command() {
 			return 0
 		fi
 
-		# Some compatible helpers (including the shared helper layout seen with
-		# BRENE) omit the SUS_PATH root-initialization setters from --help even
-		# though the v1.5.8+ SUSFS ABI still exposes them.  These two commands are
-		# prerequisites for SUS_PATH, so derive them from the live kernel feature
-		# and ABI version instead of treating --help as exhaustive.
-		case "$command_name" in
-			set_sdcard_root_path|set_android_data_root_path)
-				version=$(susfs_version_value)
-				susfs_has_feature CONFIG_KSU_SUSFS_SUS_PATH &&
-					version_ge "$version" "v1.5.8"
-				return $?
-				;;
-			*) return 1 ;;
-		esac
+		return 1
 	fi
 
 	# Older helpers may not provide useful --help output.  Use the runtime
@@ -143,7 +130,7 @@ susfs_has_command() {
 			;;
 		set_sdcard_root_path|set_android_data_root_path)
 			[ -z "$version" ] && return 0
-			version_ge "$version" "v1.5.8"
+			version_ge "$version" "v1.5.8" && ! version_ge "$version" "v2.1.0"
 			;;
 		enable_avc_log_spoofing)
 			[ -z "$version" ] && return 0
