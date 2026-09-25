@@ -20,7 +20,7 @@ case "$1" in
 		esac
 		;;
 	--help)
-		echo 'add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect set_cmdline_or_bootconfig hide_sus_mnts_for_all_procs hide_sus_mnts_for_non_su_procs enable_log enable_avc_log_spoofing'
+		echo 'add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect set_cmdline_or_bootconfig hide_sus_mnts_for_non_su_procs enable_log enable_avc_log_spoofing'
 		;;
 	*)
 		printf '%s\n' "$*" >> "$SUSAF_FAKE_SUSFS_LOG"
@@ -87,7 +87,7 @@ SUSAF_PERSISTENT_DIR="$PERSISTENT_DIR" \
 SUSAF_SUSFS_BIN="$TEST_ROOT/bin/ksu_susfs" \
 SUSAF_FAKE_SUSFS_LOG="$TEST_ROOT/susfs.log" \
 NO_BANNER=1 sh "$MODULE_DIR/SusAF.sh" --apply-toggles early >/dev/null
-grep -Fqx 'hide_sus_mnts_for_all_procs 1' "$TEST_ROOT/susfs.log"
+grep -Fqx 'hide_sus_mnts_for_non_su_procs 1' "$TEST_ROOT/susfs.log"
 
 : > "$TEST_ROOT/susfs.log"
 SUSAF_MODULE_DIR="$MODULE_DIR" \
@@ -95,7 +95,7 @@ SUSAF_PERSISTENT_DIR="$PERSISTENT_DIR" \
 SUSAF_SUSFS_BIN="$TEST_ROOT/bin/ksu_susfs" \
 SUSAF_FAKE_SUSFS_LOG="$TEST_ROOT/susfs.log" \
 NO_BANNER=1 sh "$MODULE_DIR/SusAF.sh" --apply-toggles late >/dev/null
-grep -Fqx 'hide_sus_mnts_for_all_procs 0' "$TEST_ROOT/susfs.log"
+grep -Fqx 'hide_sus_mnts_for_non_su_procs 0' "$TEST_ROOT/susfs.log"
 ! grep -Fq 'enable_log' "$TEST_ROOT/susfs.log"
 
 : > "$TEST_ROOT/susfs.log"
@@ -105,7 +105,7 @@ SUSAF_PERSISTENT_DIR="$PERSISTENT_DIR" \
 SUSAF_SUSFS_BIN="$TEST_ROOT/bin/ksu_susfs" \
 SUSAF_FAKE_SUSFS_LOG="$TEST_ROOT/susfs.log" \
 NO_BANNER=1 sh "$MODULE_DIR/SusAF.sh" --apply-toggles current >/dev/null
-grep -Fqx 'hide_sus_mnts_for_all_procs 0' "$TEST_ROOT/susfs.log"
+grep -Fqx 'hide_sus_mnts_for_non_su_procs 0' "$TEST_ROOT/susfs.log"
 grep -Fqx 'enable_log 0' "$TEST_ROOT/susfs.log"
 grep -Fqx 'enable_avc_log_spoofing 1' "$TEST_ROOT/susfs.log"
 
