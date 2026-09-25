@@ -76,8 +76,8 @@ reset_capability_cache() {
 
 # Modern SUSFS: feature list deliberately uses commas/semicolons to verify the
 # parser is not coupled to one helper output format.
-# The help output intentionally omits the SUS_PATH root setters to model the
-# shared BRENE helper observed on-device; ABI/version fallback must still expose them.
+# The help output intentionally omits the legacy SUS_PATH root setters, matching
+# the v2.3 helper observed on-device. They must remain unavailable on v2.1+.
 SUSAF_FAKE_VERSION=v2.3.0
 SUSAF_FAKE_VARIANT=ReSukiSU
 SUSAF_FAKE_KSU_CHECK=supported
@@ -95,9 +95,9 @@ grep -Fqx 'UMOUNT_BACKEND=kernel_umount' "$TEST_ROOT/v2.out"
 grep -Fqx 'CMD_ADD_SUS_PATH=1' "$TEST_ROOT/v2.out"
 grep -Fqx 'CMD_ADD_TRY_UMOUNT=0' "$TEST_ROOT/v2.out"
 grep -Fqx 'KERNEL_UMOUNT=1' "$TEST_ROOT/v2.out"
-grep -Fqx 'MOUNT_FILTER_BACKEND=hide_sus_mnts_for_all_procs' "$TEST_ROOT/v2.out"
-grep -Fqx 'CMD_SET_SDCARD_ROOT_PATH=1' "$TEST_ROOT/v2.out"
-grep -Fqx 'CMD_SET_ANDROID_DATA_ROOT_PATH=1' "$TEST_ROOT/v2.out"
+grep -Fqx 'MOUNT_FILTER_BACKEND=hide_sus_mnts_for_non_su_procs' "$TEST_ROOT/v2.out"
+grep -Fqx 'CMD_SET_SDCARD_ROOT_PATH=0' "$TEST_ROOT/v2.out"
+grep -Fqx 'CMD_SET_ANDROID_DATA_ROOT_PATH=0' "$TEST_ROOT/v2.out"
 grep -Fqx 'REGISTRY=kernel_umount|control|1|kernelsu:kernel_umount|none' "$TEST_ROOT/v2.out"
 grep -Fqx 'REGISTRY=try_umount|legacy|0|command:add_try_umount|kernel_umount' "$TEST_ROOT/v2.out"
 grep -Fqx 'REGISTRY=sus_mount|legacy|0|command:add_sus_mount|kernel_managed_mounts' "$TEST_ROOT/v2.out"
@@ -111,8 +111,7 @@ SUSAF_ANDROID_DATA_WAIT_SECONDS=0
 export SUSAF_SDCARD_ROOT SUSAF_ANDROID_DATA_ROOT SUSAF_ANDROID_DATA_WAIT_SECONDS
 : > "$SUSAF_FAKE_SUSFS_LOG"
 susfs_prepare_path_roots >/dev/null
-grep -Fqx "set_sdcard_root_path $TEST_ROOT/sdcard" "$SUSAF_FAKE_SUSFS_LOG"
-grep -Fqx "set_android_data_root_path $TEST_ROOT/sdcard/Android/data" "$SUSAF_FAKE_SUSFS_LOG"
+[ ! -s "$SUSAF_FAKE_SUSFS_LOG" ]
 
 : > "$SUSAF_FAKE_SUSFS_LOG"
 susfs_set_mount_filter 1 >/dev/null
@@ -122,20 +121,39 @@ grep -Fqx 'hide_sus_mnts_for_all_procs 1' "$SUSAF_FAKE_SUSFS_LOG"
 susfs_add_open_redirect /original /redirected 4 >/dev/null
 grep -Fqx 'add_open_redirect /original /redirected 4' "$SUSAF_FAKE_SUSFS_LOG"
 
+# Transitional SUSFS v2.0 still requires the two SUS_PATH root setters.
+SUSAF_FAKE_VERSION=v2.0.0
+SUSAF_FAKE_VARIANT=GKI
+SUSAF_FAKE_KSU_CHECK=unsupported
+SUSAF_FAKE_FEATURES='CONFIG_KSU_SUSFS_SUS_PATH'
+SUSAF_FAKE_HELP='add_sus_path add_sus_path_loop hide_sus_mnts_for_non_su_procs'
+export SUSAF_FAKE_VERSION SUSAF_FAKE_VARIANT SUSAF_FAKE_KSU_CHECK SUSAF_FAKE_FEATURES SUSAF_FAKE_HELP
+reset_capability_cache
+
+show_capabilities > "$TEST_ROOT/v20.out"
+grep -Fqx 'CMD_SET_SDCARD_ROOT_PATH=1' "$TEST_ROOT/v20.out"
+grep -Fqx 'CMD_SET_ANDROID_DATA_ROOT_PATH=1' "$TEST_ROOT/v20.out"
+grep -Fqx 'MOUNT_FILTER_BACKEND=hide_sus_mnts_for_non_su_procs' "$TEST_ROOT/v20.out"
+
+: > "$SUSAF_FAKE_SUSFS_LOG"
+susfs_prepare_path_roots >/dev/null
+grep -Fqx "set_sdcard_root_path $TEST_ROOT/sdcard" "$SUSAF_FAKE_SUSFS_LOG"
+grep -Fqx "set_android_data_root_path $TEST_ROOT/sdcard/Android/data" "$SUSAF_FAKE_SUSFS_LOG"
+
 # Older generation: custom try_umount and sus_mount remain controllable when
 # the helper/kernel expose them and KernelSU's official backend is unavailable.
 SUSAF_FAKE_VERSION=v1.5.12
 SUSAF_FAKE_VARIANT=KernelSU
 SUSAF_FAKE_KSU_CHECK=unsupported
 SUSAF_FAKE_FEATURES='CONFIG_KSU_SUSFS_SUS_PATH CONFIG_KSU_SUSFS_SUS_MOUNT CONFIG_KSU_SUSFS_TRY_UMOUNT CONFIG_KSU_SUSFS_SUS_SU CONFIG_KSU_SUSFS_OPEN_REDIRECT'
-SUSAF_FAKE_HELP='add_sus_path add_sus_path_loop add_sus_mount add_try_umount add_open_redirect hide_sus_mnts_for_non_su_procs enable_avc_log_spoofing'
+SUSAF_FAKE_HELP='add_sus_path add_sus_path_loop add_sus_mount add_try_umount add_open_redirect hide_sus_mnts_for_all_procs enable_avc_log_spoofing'
 export SUSAF_FAKE_VERSION SUSAF_FAKE_VARIANT SUSAF_FAKE_KSU_CHECK SUSAF_FAKE_FEATURES SUSAF_FAKE_HELP
 reset_capability_cache
 
 show_capabilities > "$TEST_ROOT/v1.out"
 grep -Fqx 'UMOUNT_BACKEND=susfs_try_umount' "$TEST_ROOT/v1.out"
 grep -Fqx 'KERNEL_UMOUNT=0' "$TEST_ROOT/v1.out"
-grep -Fqx 'MOUNT_FILTER_BACKEND=hide_sus_mnts_for_non_su_procs' "$TEST_ROOT/v1.out"
+grep -Fqx 'MOUNT_FILTER_BACKEND=hide_sus_mnts_for_all_procs' "$TEST_ROOT/v1.out"
 grep -Fqx 'REGISTRY=sus_mount|control|1|command:add_sus_mount|none' "$TEST_ROOT/v1.out"
 grep -Fqx 'REGISTRY=try_umount|control|1|command:add_try_umount|none' "$TEST_ROOT/v1.out"
 grep -Fqx 'REGISTRY=sus_su|status|1|feature:CONFIG_KSU_SUSFS_SUS_SU|none' "$TEST_ROOT/v1.out"
