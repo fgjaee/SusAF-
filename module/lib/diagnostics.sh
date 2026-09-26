@@ -241,7 +241,7 @@ generate_diagnostics() {
 	fi
 	kernel_mode=$(get_conf KERNEL_UMOUNT_MODE enabled "$PERSISTENT_DIR/config.txt")
 	mount_filter_early=$(get_conf HIDE_SUS_MNTS_NON_SU 0 "$PERSISTENT_DIR/config.txt")
-	mount_filter_late=$(get_conf HIDE_SUS_MNTS_LATE 0 "$PERSISTENT_DIR/config.txt")
+	mount_filter_late=$(get_conf HIDE_SUS_MNTS_LATE 1 "$PERSISTENT_DIR/config.txt")
 	allow_broad=$(get_conf ALLOW_BROAD_KERNEL_UMOUNT 0 "$PERSISTENT_DIR/config.txt")
 	mount_result=$(diagnostics_property "$mount_report" result not-recorded)
 	mount_failures=$(diagnostics_property "$mount_report" failed "")

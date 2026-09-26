@@ -11,6 +11,8 @@ BIN_DIR="$TEST_ROOT/bin"
 mkdir -p "$STATE_DIR/migrations" "$BIN_DIR"
 
 cat > "$PERSISTENT_DIR/config.txt" <<'EOF'
+HIDE_SUS_MNTS_NON_SU=1
+HIDE_SUS_MNTS_LATE=1
 KERNEL_UMOUNT_MODE=enabled
 AUTO_KERNEL_UMOUNT=1
 ALLOW_BROAD_KERNEL_UMOUNT=0
@@ -222,11 +224,11 @@ grep -Fqx "kernelsu.binary=$BIN_DIR/ksud" "$REPORT"
 grep -Fqx 'kernel_umount.support=supported' "$REPORT"
 grep -Fqx 'kernel_umount.current=enabled' "$REPORT"
 grep -Fqx 'kernel_umount.allow_broad=0' "$REPORT"
-grep -Fqx 'mount_filter.early=0' "$REPORT"
-grep -Fqx 'mount_filter.late=0' "$REPORT"
+grep -Fqx 'mount_filter.early=1' "$REPORT"
+grep -Fqx 'mount_filter.late=1' "$REPORT"
 
 cp "$PERSISTENT_DIR/config.txt" "$PERSISTENT_DIR/config.saved"
-printf 'HIDE_SUS_MNTS_LATE=1\n' >> "$PERSISTENT_DIR/config.txt"
+sed -i 's/^HIDE_SUS_MNTS_LATE=.*/HIDE_SUS_MNTS_LATE=1/' "$PERSISTENT_DIR/config.txt"
 SUSAF_DIAGNOSTICS_FILE="$TEST_ROOT/late-filter.stdout" \
 SUSAF_MODULE_DIR="$MODULE_DIR" \
 SUSAF_PERSISTENT_DIR="$PERSISTENT_DIR" \
@@ -243,7 +245,7 @@ SUSAF_CMDLINE_SOURCE="$TEST_ROOT/cmdline" \
 SUSAF_PROC_VERSION="$TEST_ROOT/proc-version" \
 sh "$MODULE_DIR/SusAF.sh" --diagnostics >/dev/null
 grep -Fqx 'mount_filter.late=1' "$TEST_ROOT/late-filter.stdout"
-grep -Fqx 'overall.status=degraded' "$TEST_ROOT/late-filter.stdout"
+grep -Fqx 'overall.status=healthy' "$TEST_ROOT/late-filter.stdout"
 mv "$PERSISTENT_DIR/config.saved" "$PERSISTENT_DIR/config.txt"
 
 cp "$PERSISTENT_DIR/config.txt" "$PERSISTENT_DIR/config.saved"

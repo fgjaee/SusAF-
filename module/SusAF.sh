@@ -344,12 +344,12 @@ apply_toggles() {
 		avc_spoof=$(get_conf ENABLE_AVC_LOG_SPOOFING "" "$file")
 		;;
 	late)
-		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 0 "$file")
+		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 1 "$file")
 		enable_log=""
 		avc_spoof=""
 		;;
 	current)
-		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 0 "$file")
+		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 1 "$file")
 		enable_log=$(get_conf ENABLE_LOG "" "$file")
 		avc_spoof=$(get_conf ENABLE_AVC_LOG_SPOOFING "" "$file")
 		;;
