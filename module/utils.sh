@@ -151,6 +151,46 @@ probe_susfs_binary() {
 	return 0
 }
 
+select_susfs_binary() {
+	local min_version="${1:-v0.0.0}"
+	local external="$DEST_BIN_DIR/ksu_susfs"
+	local bundled="$SUSFS_BUNDLED_BIN"
+
+	if [ -n "${SUSAF_SUSFS_BIN:-}" ]; then
+		SUSFS_BIN="$SUSAF_SUSFS_BIN"
+		SUSFS_BIN_SOURCE=override
+		export SUSFS_BIN SUSFS_BIN_SOURCE
+		return 0
+	fi
+
+	if [ -x "$external" ] && probe_susfs_binary "$external" "$min_version"; then
+		SUSFS_BIN="$external"
+		SUSFS_BIN_SOURCE=external
+		export SUSFS_BIN SUSFS_BIN_SOURCE
+		return 0
+	fi
+
+	if [ -x "$bundled" ] && probe_susfs_binary "$bundled" "$min_version"; then
+		SUSFS_BIN="$bundled"
+		SUSFS_BIN_SOURCE=bundled
+		export SUSFS_BIN SUSFS_BIN_SOURCE
+		return 0
+	fi
+
+	if [ -x "$external" ]; then
+		SUSFS_BIN="$external"
+		SUSFS_BIN_SOURCE=external-incompatible
+	elif [ -x "$bundled" ]; then
+		SUSFS_BIN="$bundled"
+		SUSFS_BIN_SOURCE=bundled-incompatible
+	else
+		SUSFS_BIN="$external"
+		SUSFS_BIN_SOURCE=unavailable
+	fi
+	export SUSFS_BIN SUSFS_BIN_SOURCE
+	return 1
+}
+
 restore_susfs_backup() {
 	local backup="$1" destination="$2"
 	local restore_temp="${destination}.restore.$$"
@@ -171,6 +211,7 @@ update_susfs() {
 	local schema component repository commit artifact expected abi min_version url
 	local arch state_dir candidate destination install_temp backup backup_temp bundled
 	local actual current_sha installed_sha bundled_sha backup_valid=0
+	local destination_target
 
 	updater_prepare_report || {
 		echo "[!] Could not create private updater report"
@@ -246,7 +287,57 @@ update_susfs() {
 	chmod 700 "$state_dir" 2>/dev/null
 	rm -f "$candidate" "$install_temp" "$backup_temp"
 
-	if [ -e "$destination" ] && { [ ! -f "$destination" ] || [ -L "$destination" ]; }; then
+	if [ -L "$destination" ]; then
+		destination_target=$(readlink -f "$destination" 2>/dev/null) || destination_target=
+		updater_report "destination_owner=external-symlink"
+		updater_report "destination_target=$destination_target"
+
+		case "$destination_target" in
+			"$DEST_BIN_DIR"/*) ;;
+			*)
+				updater_report "external_compatibility=unsafe-target"
+				updater_finish unsafe-destination
+				return 1
+				;;
+		esac
+
+		if [ -f "$destination_target" ] && [ -x "$destination" ] && probe_susfs_binary "$destination" "$min_version"; then
+			updater_report "external_compatibility=compatible"
+			updater_report "candidate_version=$UPDATER_PROBE_VERSION"
+			updater_report "candidate_variant=$UPDATER_PROBE_VARIANT"
+			updater_report "verification=external-managed"
+			updater_report "backup=not-applicable"
+			updater_report "rollback=not-needed"
+			updater_finish external-compatible
+			return 0
+		fi
+
+		bundled="${SUSAF_BUNDLED_SUSFS_BIN:-$module_root/bin/ksu_susfs}"
+		if [ -f "$bundled" ] && [ ! -L "$bundled" ]; then
+			bundled_sha=$(updater_sha256 "$bundled" 2>/dev/null) || bundled_sha=unavailable
+			if [ "$bundled_sha" = "$expected" ] && validate_susfs_elf "$bundled" && probe_susfs_binary "$bundled" "$min_version"; then
+				updater_report "external_compatibility=incompatible"
+				updater_report "fallback=bundled"
+				updater_report "candidate_version=$UPDATER_PROBE_VERSION"
+				updater_report "candidate_variant=$UPDATER_PROBE_VARIANT"
+				updater_report "verification=verified"
+				updater_report "backup=not-applicable"
+				updater_report "rollback=not-needed"
+				updater_finish external-preserved-bundled-fallback
+				return 0
+			fi
+		fi
+
+		updater_report "external_compatibility=incompatible"
+		updater_report "fallback=unavailable"
+		updater_report "verification=failed"
+		updater_report "backup=not-applicable"
+		updater_report "rollback=not-needed"
+		updater_finish external-incompatible-no-fallback
+		return 1
+	fi
+
+	if [ -e "$destination" ] && [ ! -f "$destination" ]; then
 		updater_finish unsafe-destination
 		return 1
 	fi

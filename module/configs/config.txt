@@ -2,12 +2,12 @@
 #
 # hide_sus_mnts_for_non_su_procs: 0 = don't hide, 1 = hide all sus mounts
 #   for non-su processes (default 0 in kernel). The early value protects zygote
-#   startup from caching Sus mounts. The late value is deliberately 0 so normal
-#   app and isolated-process mount views are not blanket-filtered after boot;
-#   targeted KernelSU umount and Sus path rules remain active.
-#
-#   Keep HIDE_SUS_MNTS_LATE=1 only for a stack that explicitly requires the
-#   legacy always-on behavior. It can create cross-process mount-table drift.
+#   startup from caching Sus mounts. Android 17 validation showed that releasing
+#   the filter after boot can expose module-backed mounts to zygote_next /
+#   isolated app processes even when targeted KernelSU umount is registered.
+#   Keep the filter enabled through the late stage by default. Users can still
+#   explicitly set the late value to 0 for a stack that has been validated with
+#   a different namespace model.
 #
 # enable_log: 0 = disable susfs kernel log, 1 = enable
 #
@@ -17,7 +17,7 @@
 #   debugging permission/selinux issues.
 #
 HIDE_SUS_MNTS_NON_SU=1
-HIDE_SUS_MNTS_LATE=0
+HIDE_SUS_MNTS_LATE=1
 ENABLE_LOG=0
 ENABLE_AVC_LOG_SPOOFING=1
 

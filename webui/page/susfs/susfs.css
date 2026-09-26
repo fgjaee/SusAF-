@@ -87,3 +87,75 @@
 #apply-toggles {
     flex: 1;
 }
+
+
+/* Runtime kernel capability registry */
+#capability-registry-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.capability-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.capability-chip,
+.capability-mode {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--md-sys-color-surface-container-high);
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.74em;
+    line-height: 1.2;
+}
+
+.capability-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.capability-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.capability-row:last-child {
+    border-bottom: none;
+}
+
+.capability-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.capability-copy strong {
+    font-size: 0.9em;
+    font-weight: 600;
+}
+
+.capability-copy small,
+.capability-unmapped {
+    color: var(--md-sys-color-outline);
+    font-size: 0.76em;
+    line-height: 1.35;
+}
+
+.capability-row[data-mode="legacy"] .capability-mode {
+    background: var(--md-sys-color-error-container);
+    color: var(--md-sys-color-on-error-container);
+}
+
+.capability-unmapped {
+    padding-top: 4px;
+}

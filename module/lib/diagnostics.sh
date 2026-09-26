@@ -179,16 +179,24 @@ generate_diagnostics() {
 	features=""
 	feature_count=0
 	if [ -x "$SUSFS_BIN" ]; then
-		susfs_version=$(susfs show version 2>/dev/null) || susfs_version="unavailable"
-		susfs_variant=$(susfs show variant 2>/dev/null) || susfs_variant="unavailable"
-		features=$(susfs show enabled_features 2>/dev/null | awk '
-			NF {
-				gsub(/^[[:space:]]+|[[:space:]]+$/, "")
-				value=value (value == "" ? "" : " | ") $0
+		susfs_version=$(susfs_version_value)
+		susfs_variant=$(susfs_variant_value)
+		features=$(susfs_features | tr ',;' '  ' | awk '{
+			for (i = 1; i <= NF; i++) {
+				token = $i
+				gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
+				if (token ~ /^CONFIG_KSU_SUSFS_[A-Z0-9_]+$/ && !seen[token]++) {
+					value = value (value == "" ? "" : " | ") token
+				}
 			}
-			END { print value }
-		')
-		feature_count=$(susfs show enabled_features 2>/dev/null | awk 'NF { count++ } END { print count + 0 }')
+		} END { print value }')
+		feature_count=$(susfs_features | tr ',;' '  ' | awk '{
+			for (i = 1; i <= NF; i++) {
+				token = $i
+				gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
+				if (token ~ /^CONFIG_KSU_SUSFS_[A-Z0-9_]+$/ && !seen[token]++) count++
+			}
+		} END { print count + 0 }')
 		if [ -n "$susfs_version" ] && [ "$susfs_version" != "unavailable" ] && version_ge "$susfs_version" "$SUSFS_MIN_VERSION"; then
 			susfs_status=active
 		else
@@ -233,7 +241,7 @@ generate_diagnostics() {
 	fi
 	kernel_mode=$(get_conf KERNEL_UMOUNT_MODE enabled "$PERSISTENT_DIR/config.txt")
 	mount_filter_early=$(get_conf HIDE_SUS_MNTS_NON_SU 0 "$PERSISTENT_DIR/config.txt")
-	mount_filter_late=$(get_conf HIDE_SUS_MNTS_LATE 0 "$PERSISTENT_DIR/config.txt")
+	mount_filter_late=$(get_conf HIDE_SUS_MNTS_LATE 1 "$PERSISTENT_DIR/config.txt")
 	allow_broad=$(get_conf ALLOW_BROAD_KERNEL_UMOUNT 0 "$PERSISTENT_DIR/config.txt")
 	mount_result=$(diagnostics_property "$mount_report" result not-recorded)
 	mount_failures=$(diagnostics_property "$mount_report" failed "")
@@ -252,7 +260,7 @@ generate_diagnostics() {
 		[ "$mount_result" = ok ] || overall=degraded
 	fi
 	case "$mount_filter_late" in
-	0) ;;
+	0|1) ;;
 	*) [ "$module_status" = disabled ] || overall=degraded ;;
 	esac
 	case "$allow_broad" in
@@ -300,6 +308,7 @@ generate_diagnostics() {
 		diagnostics_put susfs.variant "$susfs_variant"
 		diagnostics_put susfs.feature_count "$feature_count"
 		diagnostics_put susfs.features "$features"
+		diagnostics_put susfs.capability_source "runtime"
 
 		diagnostics_put kernelsu.version "$ksu_version"
 		diagnostics_put kernelsu.binary "${ksu_bin:-unavailable}"

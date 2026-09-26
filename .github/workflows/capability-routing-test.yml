@@ -1,0 +1,71 @@
+name: Capability Routing Tests
+
+on:
+  push:
+    branches:
+      - capability-routing
+  pull_request:
+    branches:
+      - susaf-dev
+    paths:
+      - 'module/**'
+      - 'webui/**'
+      - 'tests/**'
+      - '.github/workflows/capability-routing-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Shell syntax
+        run: |
+          find module tests -type f -name '*.sh' -print0 |
+            xargs -0 -n1 sh -n
+
+      - name: Shell tests
+        run: |
+          set -eu
+          for test_file in tests/test-*.sh; do
+            echo "==> $test_file"
+            sh "$test_file"
+          done
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install WebUI dependencies
+        working-directory: webui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WebUI
+        working-directory: webui
+        run: pnpm build
+
+      - name: Package installable test module
+        run: |
+          set -eu
+          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+          export SOURCE_DATE_EPOCH
+          mkdir -p dist
+          .github/scripts/package_module.sh module dist/SusAF-capability-routing.zip
+          unzip -t dist/SusAF-capability-routing.zip
+          unzip -p dist/SusAF-capability-routing.zip module.prop | grep -Fqx 'id=susaf'
+          unzip -Z1 dist/SusAF-capability-routing.zip | grep -Fqx 'webroot/index.html'
+          unzip -Z1 dist/SusAF-capability-routing.zip | grep -Fqx 'lib/susfs-capabilities.sh'
+          sha256sum dist/SusAF-capability-routing.zip > dist/SHA256SUMS
+
+      - name: Upload test module
+        uses: actions/upload-artifact@v7
+        with:
+          name: SusAF-capability-routing
+          if-no-files-found: error
+          path: |
+            dist/SusAF-capability-routing.zip
+            dist/SHA256SUMS
