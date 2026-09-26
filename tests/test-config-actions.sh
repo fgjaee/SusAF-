@@ -109,7 +109,7 @@ SUSAF_PERSISTENT_DIR="$PERSISTENT_DIR" \
 SUSAF_SUSFS_BIN="$TEST_ROOT/bin/ksu_susfs" \
 SUSAF_FAKE_SUSFS_LOG="$TEST_ROOT/susfs.log" \
 NO_BANNER=1 sh "$MODULE_DIR/SusAF.sh" --apply-toggles current >/dev/null
-grep -Fqx 'hide_sus_mnts_for_non_su_procs 0' "$TEST_ROOT/susfs.log"
+grep -Fqx 'hide_sus_mnts_for_non_su_procs 1' "$TEST_ROOT/susfs.log"
 grep -Fqx 'enable_log 0' "$TEST_ROOT/susfs.log"
 grep -Fqx 'enable_avc_log_spoofing 1' "$TEST_ROOT/susfs.log"
 

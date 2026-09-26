@@ -260,7 +260,7 @@ generate_diagnostics() {
 		[ "$mount_result" = ok ] || overall=degraded
 	fi
 	case "$mount_filter_late" in
-	0) ;;
+	0|1) ;;
 	*) [ "$module_status" = disabled ] || overall=degraded ;;
 	esac
 	case "$allow_broad" in
