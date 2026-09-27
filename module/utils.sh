@@ -163,16 +163,16 @@ select_susfs_binary() {
 		return 0
 	fi
 
-	if [ -x "$external" ] && probe_susfs_binary "$external" "$min_version"; then
-		SUSFS_BIN="$external"
-		SUSFS_BIN_SOURCE=external
+	if [ -x "$bundled" ] && probe_susfs_binary "$bundled" "$min_version"; then
+		SUSFS_BIN="$bundled"
+		SUSFS_BIN_SOURCE=bundled
 		export SUSFS_BIN SUSFS_BIN_SOURCE
 		return 0
 	fi
 
-	if [ -x "$bundled" ] && probe_susfs_binary "$bundled" "$min_version"; then
-		SUSFS_BIN="$bundled"
-		SUSFS_BIN_SOURCE=bundled
+	if [ -x "$external" ] && probe_susfs_binary "$external" "$min_version"; then
+		SUSFS_BIN="$external"
+		SUSFS_BIN_SOURCE=external
 		export SUSFS_BIN SUSFS_BIN_SOURCE
 		return 0
 	fi

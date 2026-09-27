@@ -36,8 +36,15 @@ SUSFS_BUNDLED_BIN="$TEST_ROOT/bundled"
 export SUSFS_BUNDLED_BIN
 
 select_susfs_binary v2.2.0
+[ "$SUSFS_BIN" = "$TEST_ROOT/bundled" ]
+[ "$SUSFS_BIN_SOURCE" = bundled ]
+
+rm -f "$TEST_ROOT/bundled"
+select_susfs_binary v2.2.0
 [ "$SUSFS_BIN" = "$DEST_BIN_DIR/ksu_susfs" ]
 [ "$SUSFS_BIN_SOURCE" = external ]
+
+make_helper "$TEST_ROOT/bundled" v2.3.0 Bundled
 
 rm -f "$DEST_BIN_DIR/ksu_susfs"
 make_helper "$TEST_ROOT/external-old" v1.5.12 Legacy
