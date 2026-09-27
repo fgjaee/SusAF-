@@ -6,22 +6,19 @@ MODDIR="$MODULE_DIR"
 USER_SCRIPTS_DIR="$PERSISTENT_DIR/scripts"
 POSTFS_SCRIPTS_FILE="$PERSISTENT_DIR/scripts_postfs.txt"
 BOOTCOMPLETED_SCRIPTS_FILE="$PERSISTENT_DIR/scripts_bootcompleted.txt"
-SUSFS_BIN="${SUSAF_SUSFS_BIN:-$DEST_BIN_DIR/ksu_susfs}"
-[ -n "${SUSAF_SUSFS_BIN:-}" ] || [ -x "$SUSFS_BIN" ] || \
-	[ ! -x "$SUSFS_BUNDLED_BIN" ] || SUSFS_BIN="$SUSFS_BUNDLED_BIN"
 SUSFS_MIN_VERSION="v2.2.0"
 
 . "$MODDIR/utils.sh"
+select_susfs_binary "$SUSFS_MIN_VERSION" || true
 . "$MODDIR/lib/kernel-umount.sh"
 . "$MODDIR/lib/diagnostics.sh"
 . "$MODDIR/lib/backup-restore.sh"
 . "$MODDIR/lib/coverage.sh"
+. "$MODDIR/lib/config-control.sh"
 
 versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
 
 [ -n "$WEBUI_QUIET" ] && [ "${NO_BANNER:-0}" = "0" ] && banner
-
-susfs() { "$SUSFS_BIN" "$@"; }
 
 version_ge() {
 	ver1="${1#v}"
@@ -41,6 +38,8 @@ version_ge() {
 	[ "$minor1" -lt "$minor2" ] && return 1
 	[ "$patch1" -ge "$patch2" ]
 }
+
+. "$MODDIR/lib/susfs-capabilities.sh"
 
 [ ! -d "$PERSISTENT_DIR" ] && mkdir -p "$PERSISTENT_DIR"
 
@@ -123,12 +122,20 @@ run_script() {
 	echo "[+] exit code: $?"
 }
 
+susaf_awk() {
+	if command -v busybox >/dev/null 2>&1; then
+		busybox awk "$@"
+	else
+		awk "$@"
+	fi
+}
+
 apply_list() {
 	default="$1"; cmd="$2"; mode="$3"; file="${4:-$default}"
 
 	if [ -f "$file" ]; then
 		tmp="${file}.tmp.$$"
-		busybox awk '
+		susaf_awk '
 			/^[[:space:]]*#/ { print; next }
 			/^[[:space:]]*$/ { next }
 			!seen[$0]++
@@ -137,13 +144,26 @@ apply_list() {
 	fi
 
 	list=$(read_list "$file" 2>/dev/null) || list=
-	[ -z "$list" ] && return
-	echo "$list" | while IFS= read -r p; do
+	[ -z "$list" ] && return 0
+
+	list_tmp="$PERSISTENT_DIR/.apply-list.$$"
+	printf '%s\n' "$list" > "$list_tmp" || return 1
+	status=0
+	while IFS= read -r p || [ -n "$p" ]; do
 		if [ "$mode" = "1" ] && [ ! -e "$p" ]; then echo "[!] skip missing path: $p"; continue; fi
 		if [ "$mode" = "2" ] && [ ! -e "$p" ]; then continue; fi
 		echo "[>] $cmd $p"
-		susfs "$cmd" "$p"
-	done
+		if ! susfs "$cmd" "$p"; then
+			rc=$?
+			# POSIX ! inverts the status, so recover a stable nonzero marker for
+			# the aggregate result while continuing to test remaining entries.
+			[ "$rc" -ne 0 ] || rc=1
+			echo "[x] $cmd failed for: $p"
+			status=1
+		fi
+	done < "$list_tmp"
+	rm -f "$list_tmp"
+	return "$status"
 }
 
 append_to_default() {
@@ -161,7 +181,7 @@ append_to_default() {
 	cat "$src" >> "$default"
 
 	tmp="${default}.tmp.$$"
-	busybox awk '
+	susaf_awk '
 		/^[[:space:]]*#/ { print; next }
 		!seen[$0]++
 	' "$default" > "$tmp" && {
@@ -241,8 +261,7 @@ apply_open_redirect() {
 		scheme=$(echo "$line" | awk '{print $3}')
 		[ -z "$target" ] || [ -z "$redirect" ] || [ -z "$scheme" ] && continue
 		[ -e "$target" ] && [ -e "$redirect" ] || { echo "[!] skip: $target -> $redirect (missing endpoint)"; continue; }
-		echo "[>] add_open_redirect $target -> $redirect (scheme $scheme)"
-		susfs add_open_redirect "$target" "$redirect" "$scheme"
+		susfs_add_open_redirect "$target" "$redirect" "$scheme"
 	done
 }
 
@@ -325,12 +344,12 @@ apply_toggles() {
 		avc_spoof=$(get_conf ENABLE_AVC_LOG_SPOOFING "" "$file")
 		;;
 	late)
-		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 0 "$file")
+		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 1 "$file")
 		enable_log=""
 		avc_spoof=""
 		;;
 	current)
-		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 0 "$file")
+		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 1 "$file")
 		enable_log=$(get_conf ENABLE_LOG "" "$file")
 		avc_spoof=$(get_conf ENABLE_AVC_LOG_SPOOFING "" "$file")
 		;;
@@ -343,8 +362,8 @@ apply_toggles() {
 	case "$hide_mnts" in
 	"") ;;
 	0|1)
-		echo "[>] hide_sus_mnts_for_non_su_procs $hide_mnts ($stage)"
-		susfs hide_sus_mnts_for_non_su_procs "$hide_mnts" || result=1
+		echo "[*] mount filter policy: $hide_mnts ($stage)"
+		susfs_set_mount_filter "$hide_mnts" || result=1
 		;;
 	*) echo "[x] invalid hide-mounts value: $hide_mnts"; result=1 ;;
 	esac
@@ -376,6 +395,7 @@ stage_late() {
 	echo "[+] stage: late (boot-completed)"
 	apply_kernel_umount_feature
 	apply_kernel_umount_mounts
+	susfs_prepare_path_roots || true
 	apply_sus_paths
 	apply_sus_paths_loop
 	apply_sus_maps
@@ -405,6 +425,9 @@ show_help () {
 	printf " --stage-early \t\t\t\tpost-fs-data stage only\n"
 	printf " --stage-late \t\t\t\tboot-completed stage only\n"
 	printf " --status \t\t\t\tshow susfs version / variant / enabled features\n"
+	printf " --config-show \t\t\tshow validated persistent controller settings\n"
+	printf " --config-set KEY=VALUE... \tatomically validate and save controller settings\n"
+	printf " --capabilities \t\t\tmachine-readable kernel/binary capability report\n"
 	printf " --force-update \t\t\tinstall the release-pinned, verified SuSFS binary\n"
 	printf " --export-config \t\t\texport a validated Sus'AF configuration archive\n"
 	printf " --restore-config <archive> \t\tstage, validate, and restore a Sus'AF archive\n"
@@ -445,6 +468,9 @@ case "$1" in
 	--stage-early) stage_early; exit ;;
 	--stage-late) stage_late; exit ;;
 	--status) show_status; exit ;;
+	--config-show) susaf_config_show "$PERSISTENT_DIR/config.txt"; exit ;;
+	--config-set) shift; susaf_config_set "$PERSISTENT_DIR/config.txt" "$@"; exit ;;
+	--capabilities) show_capabilities; exit ;;
 	--force-update) update_susfs; exit ;;
 	--export-config) export_susaf_config; exit ;;
 	--restore-config) restore_susaf_config "$2"; exit ;;

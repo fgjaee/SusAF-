@@ -19,7 +19,7 @@ printf '# loop paths\n' > "$PERSISTENT_DIR/sus_paths_loop.txt"
 printf '# umount paths\n' > "$PERSISTENT_DIR/kernel_umount.txt"
 cat > "$PERSISTENT_DIR/config.txt" <<'EOF'
 HIDE_SUS_MNTS_NON_SU=1
-HIDE_SUS_MNTS_LATE=0
+HIDE_SUS_MNTS_LATE=1
 ENABLE_LOG=0
 ENABLE_AVC_LOG_SPOOFING=1
 KERNEL_UMOUNT_MODE=enabled
@@ -58,9 +58,9 @@ EOF
 chmod 755 "$TEST_ROOT/bin/pidof"
 
 cat > "$TEST_ROOT/mountinfo" <<EOF
-31 25 0:26 / / rw,relatime - rootfs rootfs rw
-40 31 0:50 /data/adb/modules/hosts/system/etc/hosts /system/etc/hosts ro - tmpfs KSU rw
-41 31 0:51 /data/adb/modules/overlay/system_ext /system_ext ro - tmpfs KSU rw
+2000000000 25 0:26 / / rw,relatime shared:200000 - rootfs rootfs rw
+2000000001 2000000000 0:50 /data/adb/modules/hosts/system/etc/hosts /system/etc/hosts ro shared:200000 - tmpfs KSU rw
+2000000002 2000000000 0:51 /data/adb/modules/overlay/system_ext /system_ext ro shared:200000 - tmpfs KSU rw
 EOF
 
 export PERSISTENT_DIR
@@ -96,6 +96,9 @@ grep -Fqx 'candidate.safe=1' "$report"
 grep -Fqx 'candidate.risky=2' "$report"
 grep -Fqx 'candidate.sus_maps=1' "$report"
 grep -Fqx 'candidate.kernel_umount=2' "$report"
+grep -Fqx 'mount.high_id_namespaces=1' "$report"
+! grep -Fq 'reason=high_mount_id' "$report"
+! grep -Fq 'target=HIDE_SUS_MNTS_LATE=1' "$report"
 grep -Fqx "candidate.1.target=$MAP_ROOT/target/lib64/exact-candidate.so" "$report"
 grep -Fqx 'candidate.1.kind=sus_map' "$report"
 grep -Fqx 'candidate.1.reason=mapped_module_file' "$report"
@@ -110,6 +113,15 @@ printf '%s\n' "$output" | grep -Fqx 'result=ok'
 grep -Fqx 'operation=audit' "$STATE_DIR/coverage.progress.txt"
 grep -Fqx 'status=complete' "$STATE_DIR/coverage.progress.txt"
 grep -Fqx 'stage=complete' "$STATE_DIR/coverage.progress.txt"
+
+# A full-device scan must also emit its completed report to stdout. This is the
+# path used by the CLI and previously produced an on-device report with no
+# visible command output.
+full_output=$(coverage_scan)
+printf '%s\n' "$full_output" | grep -Fqx 'schema=2'
+printf '%s\n' "$full_output" | grep -Fqx 'mode=autopilot'
+printf '%s\n' "$full_output" | grep -Fqx 'result=ok'
+grep -Fqx 'status=complete' "$STATE_DIR/coverage.progress.txt"
 
 # A hostile package string must be rejected before pidof is called.
 if coverage_scan 'com.example;touch.bad' >/dev/null 2>&1; then

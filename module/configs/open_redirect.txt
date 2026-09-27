@@ -1,5 +1,9 @@
 # one entry per line: /target/path /redirected/path uid_scheme
 #
+# Sus'AF adapts this stable config format to the installed SUSFS interface:
+#   SUSFS v2.1+ -> add_open_redirect target redirect uid_scheme
+#   older SUSFS -> add_open_redirect target redirect (uid_scheme is not passed)
+#
 # uid_scheme:
 #   0 -> non-app processes (uid < 10000)
 #   1 -> non-su processes with uid 0 (root process, not su domain)

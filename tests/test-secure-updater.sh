@@ -61,6 +61,9 @@ validate_susfs_elf() {
 }
 probe_susfs_binary() {
 	file="$1"
+	if [ "${SUSAF_TEST_REJECT_PATH:-}" = "$file" ]; then
+		return 1
+	fi
 	if [ "${SUSAF_TEST_FAIL_INSTALLED:-0}" = 1 ] && [ "$file" = "$DEST_BIN_DIR/ksu_susfs" ] && grep -Fq 'candidate-v2' "$file"; then
 		return 1
 	fi
@@ -153,6 +156,41 @@ grep -Fqx 'backup=created' "$SUSAF_UPDATER_REPORT"
 grep -Fqx 'rollback=restored' "$SUSAF_UPDATER_REPORT"
 grep -Fqx 'result=post-install-probe-failed' "$SUSAF_UPDATER_REPORT"
 unset SUSAF_TEST_FAIL_INSTALLED
+
+# An externally managed helper symlink is preserved when it is compatible.
+write_manifest
+rm -f "$DEST_BIN_DIR/ksu_susfs" "$DEST_BIN_DIR/susfs" "$TEST_ROOT/download.url"
+cat > "$DEST_BIN_DIR/susfs" <<'EOF'
+#!/bin/sh
+# externally-managed-helper
+exit 0
+EOF
+chmod 755 "$DEST_BIN_DIR/susfs"
+ln -s "$DEST_BIN_DIR/susfs" "$DEST_BIN_DIR/ksu_susfs"
+cp "$DEST_BIN_DIR/susfs" "$TEST_ROOT/external-before"
+update_susfs
+[ -L "$DEST_BIN_DIR/ksu_susfs" ]
+[ "$(readlink -f "$DEST_BIN_DIR/ksu_susfs")" = "$DEST_BIN_DIR/susfs" ]
+cmp "$TEST_ROOT/external-before" "$DEST_BIN_DIR/susfs"
+[ ! -e "$TEST_ROOT/download.url" ]
+grep -Fqx 'destination_owner=external-symlink' "$SUSAF_UPDATER_REPORT"
+grep -Fqx "destination_target=$DEST_BIN_DIR/susfs" "$SUSAF_UPDATER_REPORT"
+grep -Fqx 'external_compatibility=compatible' "$SUSAF_UPDATER_REPORT"
+grep -Fqx 'result=external-compatible' "$SUSAF_UPDATER_REPORT"
+
+# If the external symlink is incompatible, preserve it and rely on the verified
+# bundled helper instead of replacing another module's shared path.
+SUSAF_BUNDLED_SUSFS_BIN="$TEST_ROOT/candidate"
+SUSAF_TEST_REJECT_PATH="$DEST_BIN_DIR/ksu_susfs"
+export SUSAF_BUNDLED_SUSFS_BIN SUSAF_TEST_REJECT_PATH
+update_susfs
+[ -L "$DEST_BIN_DIR/ksu_susfs" ]
+[ "$(readlink -f "$DEST_BIN_DIR/ksu_susfs")" = "$DEST_BIN_DIR/susfs" ]
+cmp "$TEST_ROOT/external-before" "$DEST_BIN_DIR/susfs"
+grep -Fqx 'external_compatibility=incompatible' "$SUSAF_UPDATER_REPORT"
+grep -Fqx 'fallback=bundled' "$SUSAF_UPDATER_REPORT"
+grep -Fqx 'result=external-preserved-bundled-fallback' "$SUSAF_UPDATER_REPORT"
+unset SUSAF_BUNDLED_SUSFS_BIN SUSAF_TEST_REJECT_PATH
 
 # Malformed pin metadata is rejected before any download or replacement.
 cp "$DEST_BIN_DIR/ksu_susfs" "$TEST_ROOT/before-invalid"

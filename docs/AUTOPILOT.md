@@ -4,10 +4,9 @@ Sus'AF Autopilot turns live device evidence into an editable SuSFS/KernelSU
 policy. It is designed for users who should not have to know every `SUS_MAP`,
 `SUS_PATH`, or `kernel_umount` target in advance.
 
-Autopilot is one of the main reasons Sus'AF is more than a renamed ReSuSFS
-fork. ReSuSFS remains the credited foundation, while the audit engine, policy
-schema, risk model, application transaction, verification, and rollback flow
-are maintained as Sus'AF features.
+Autopilot is a Sus'AF-owned audit, policy, risk, application, verification, and
+rollback layer. It is intentionally capability-aware rather than a static list
+of paths copied from another module.
 
 ## Boot behavior
 
@@ -65,16 +64,22 @@ and scope.
 | Existing root-tool, `su`, or root-runtime artifact | Exact `SUS_PATH_LOOP` entry | Medium or high |
 | Narrow live KernelSU/module-backed mount | Exact `kernel_umount` target | Low |
 | Hosts, APEX, partition-root, or other broad mount | Exact `kernel_umount` target | High |
-| Mount ID at least 1,000,000,000 or peer/master/propagation ID at least 100,000 | `HIDE_SUS_MNTS_LATE=1` mount-view attempt | High |
+| Large mount/peer/master/propagation IDs | Diagnostic evidence only; never a correction by themselves | None |
 | SuSFS logging enabled | `ENABLE_LOG=0` | Low |
 | AVC context spoofing disabled | `ENABLE_AVC_LOG_SPOOFING=1` | Low |
 | Kernel umount or automatic mount discovery disabled | Enable the supported control | Low |
 | Supported KernelSU `selinux_hide` control disabled | `SELINUX_HIDE_MODE=enabled` | Medium |
 
-The peer-group threshold includes the previously observed `199949` value.
-Because late blanket mount filtering can create different views between normal
-and isolated processes, it is a high-risk attempt and is never enabled by the
-safe boot pass.
+Raw mount-ID magnitude is not a reliable suspiciousness heuristic. Device
+testing showed every readable app namespace can legitimately fall into the same
+large-ID family. Autopilot may record IDs for diagnostics, but it must compare
+actual mount topology, provenance, and cross-namespace visibility before
+generating a correction.
+
+Android 17 device testing separately proved that keeping the supported
+non-superuser SuSFS mount filter enabled after boot can be necessary for
+`zygote_next`/isolated-process consistency. That behavior is tracked as a
+validated controller policy change, not inferred from mount-ID size.
 
 Selecting an actually broad mount target is the only generated action that
 also enables `ALLOW_BROAD_KERNEL_UMOUNT=1`. An unrelated warning does not
@@ -153,7 +158,8 @@ Autopilot does not:
 - change Developer Options or ADB while `ADB_MODE=unchanged`;
 - indiscriminately hide every module library or filesystem path;
 - wipe KernelSU's global umount list;
-- silently enable broad mount filtering or broad partition unmounts;
+- infer hiding policy from raw mount-ID magnitude alone;
+- silently enable broad partition unmounts;
 - claim to fix TEE, certificate, package, property, or anonymous-memory
   evidence without an installed supported hook; or
 - promise that every third-party detector will report a stock device.

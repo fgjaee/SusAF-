@@ -100,7 +100,7 @@ coverage_path_is_curated() {
 		/data/media/0/MT2|/data/media/0/AppManager|/data/local/tmp/main.jar|\
 		/system/bin/su|/system/xbin/su|/vendor/bin/su|/sbin/su|/debug_ramdisk|\
 		/data/adb/ksu|/data/adb/ap|/data/adb/magisk|/data/adb/modules|\
-		/data/adb/modules_update|/data/adb/SusAF|/data/adb/ReSuSFS|/data/adb/susfs4ksu)
+		/data/adb/modules_update|/data/adb/SusAF|/data/adb/susfs4ksu)
 			return 0 ;;
 	esac
 	return 1
@@ -180,7 +180,6 @@ coverage_collect_curated_paths() {
 /data/adb/modules|medium|root_module_path
 /data/adb/modules_update|medium|root_module_path
 /data/adb/SusAF|medium|susaf_runtime_path
-/data/adb/ReSuSFS|medium|legacy_runtime_path
 /data/adb/susfs4ksu|medium|legacy_runtime_path
 EOF
 }
@@ -299,9 +298,10 @@ coverage_collect_mount_namespaces() {
 	done
 	rm -f "$seen"
 	coverage_progress_write mount_namespaces "$COVERAGE_MOUNT_NAMESPACE_COUNT" "$COVERAGE_MOUNT_NAMESPACE_COUNT" running reading_mount_namespaces
-	if [ "$COVERAGE_HIGH_ID_COUNT" -gt 0 ] && [ "$(coverage_conf HIDE_SUS_MNTS_LATE 0)" != 1 ]; then
-		coverage_add_candidate "$output" config_toggle HIDE_SUS_MNTS_LATE=1 high_mount_id high spoof_mount_view app_namespaces
-	fi
+	# Large mount/peer/master/propagation IDs are retained as diagnostic
+	# telemetry only. Android 17 validation showed that every readable app
+	# namespace can legitimately use the same large-ID family, so ID magnitude
+	# alone must never generate a hiding-policy change.
 }
 
 coverage_collect_controls() {
@@ -377,12 +377,16 @@ coverage_scan() {
 		coverage_put limitation.tee_integrity outside_susaf; coverage_put limitation.anonymous_maps requires_injection_backend; coverage_put result ok
 	} > "$temp" || return 1
 	chmod 600 "$temp" 2>/dev/null; mv "$temp" "$output" || return 1
-	trap - EXIT HUP INT TERM; rm -f "$candidates" "$unique" "${candidates}."*; cat "$output"
+	trap - EXIT HUP INT TERM
+	rm -f "$candidates" "$unique" "${candidates}."*
 	if [ "$operation" = verify ]; then
 		coverage_progress_write evaluating 0 0 running evaluating_policy
 	else
 		coverage_progress_write complete 1 1 complete audit_complete
 	fi
+	# stdout is a supported CLI surface. Emit only after the report has been
+	# atomically installed and the progress state has reached its final stage.
+	cat "$output"
 }
 
 coverage_set_config_value() {
