@@ -128,3 +128,23 @@ automatic SUSFS policy application; backend feature ABI and compatibility
 must first be independently validated on-device. The separate
 `ksu_susfs show` tool is still required for the old policy runner.
 An alternative proc-write adapter is **not** yet implemented.
+
+
+### Verified correction: active root is YukiSU (not BakaSU)
+
+STEP 79 was run on YukiSU, with `ksud version 1.7.0-5f85169d`:
+
+- `ksud feature get kernel_umount` returned `Status: enabled`;
+- `ksud feature get selinux_hide` returned `Status: enabled`;
+- `ksud boot-info current-kmi` returned `android13-5.15`;
+- `ksud susfs support/version/features` returned `unknown command 'susfs'`;
+- `ksud kernel umount list` returned code **2**, with stderr not captured.
+
+The unavailable list is **not evidence that the registry is empty**. The
+code now fails closed instead of silently using an empty list and
+re-registering unknown targets. Next, inspect `ksud --help`,
+`ksud kernel umount --help`, and `ksud umount --help` on this exact
+YukiSU build; choose a safe supported list query before implementing a
+YukiSU-specific registry adapter.
+
+Enabled KernelSU features still do not prove SUSFS operations exist.
