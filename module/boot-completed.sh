@@ -7,6 +7,14 @@ MODULE_DIR="${SUSAF_MODULE_DIR:-/data/adb/modules/susaf}"
 stage_result=0
 stage_state_begin boot-completed || stage_result=1
 
+# A CLI-level stage gate alone is insufficient: this boot script also invokes
+# the independent KernelSU feature writer. Check once before *any* script.
+if ! sh "$MODULE_DIR/SusAF.sh" --compat-check >/dev/null 2>&1; then
+    echo "[SusAF] skipping boot-stage policy: SUSFS backend unavailable"
+    stage_state_finish boot-completed 2 || true
+    exit 0
+fi
+
 # apply late-stage susfs config now that mounts have settled
 sh "$MODULE_DIR/SusAF.sh" --stage-late || stage_result=1
 
