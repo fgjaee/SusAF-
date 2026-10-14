@@ -1,0 +1,29 @@
+name: SusAF LKM compatibility checks
+
+on:
+  push:
+    branches:
+      - lkm-compat-preflight
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell syntax
+        run: |
+          set -eu
+          find module tests -type f -name '*.sh' -exec sh -n {} +
+      - name: Run regression tests
+        run: |
+          set -eu
+          for test in tests/test-*.sh; do
+            echo "::group::$test"
+            sh "$test"
+            echo "::endgroup::"
+          done
