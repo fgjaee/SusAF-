@@ -264,8 +264,8 @@ if apply_kernel_umount_mounts "$TEST_ROOT/config" "$TEST_ROOT/kernel_umount.txt"
 fi
 grep -Fqx 'registry=unavailable' "$TEST_ROOT/unavailable-list.report"
 grep -Fqx 'result=list-interface-unavailable' "$TEST_ROOT/unavailable-list.report"
-! grep -Eq '^kernel umount add |^kernel notify-module-mounted
- "$KSUD_LOG"
+! grep -Fq "kernel umount add " "$KSUD_LOG"
+! grep -Fq "kernel notify-module-mounted" "$KSUD_LOG"
 unset SUSAF_FAKE_LIST_FAIL
 
 echo "kernel_umount tests passed"
