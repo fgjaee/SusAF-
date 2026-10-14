@@ -66,6 +66,7 @@ case "$1 $2 $3" in
 		[ "${SUSAF_FAKE_ADD_FAIL:-}" != "$4" ]
 		;;
 	"kernel umount list")
+		[ "${SUSAF_FAKE_LIST_FAIL:-0}" = 0 ] || exit 2
 		printf '%s\n' "${SUSAF_FAKE_UMOUNT_LIST_JSON:-[]}"
 		;;
 	"kernel notify-module-mounted ")
@@ -248,5 +249,23 @@ cat > "$TEST_ROOT/mount-hide.expected" <<'EOF'
 EOF
 cmp "$TEST_ROOT/mount-hide.expected" "$TEST_ROOT/mount-hide.captured"
 cmp "$TEST_ROOT/mount-hide.expected" "$PERSISTENT_DIR/state/mount_hiding.generated.txt"
+
+# YukiSU may support kernel_umount but not the kernel umount list CLI.
+# A failed query must never be interpreted as an empty registry, which would
+# otherwise cause unverified new registrations.
+SUSAF_KSUD_BIN="$TEST_ROOT/bin/ksud"
+SUSAF_FAKE_LIST_FAIL=1
+SUSAF_FAKE_KSUD_LOG="$KSUD_LOG"
+SUSAF_KERNEL_UMOUNT_REPORT="$TEST_ROOT/unavailable-list.report"
+export SUSAF_KSUD_BIN SUSAF_FAKE_LIST_FAIL SUSAF_FAKE_KSUD_LOG SUSAF_KERNEL_UMOUNT_REPORT
+: > "$KSUD_LOG"
+if apply_kernel_umount_mounts "$TEST_ROOT/config" "$TEST_ROOT/kernel_umount.txt"; then
+	echo "ERROR: missing registry list did not block writes" >&2; exit 1
+fi
+grep -Fqx 'registry=unavailable' "$TEST_ROOT/unavailable-list.report"
+grep -Fqx 'result=list-interface-unavailable' "$TEST_ROOT/unavailable-list.report"
+! grep -Eq '^kernel umount add |^kernel notify-module-mounted
+ "$KSUD_LOG"
+unset SUSAF_FAKE_LIST_FAIL
 
 echo "kernel_umount tests passed"
