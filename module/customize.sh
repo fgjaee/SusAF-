@@ -54,7 +54,12 @@ rm -rf "$CONFIG_DIR"
 	exit 1
 }
 chmod 755 "$MODPATH/bin/ksu_susfs" || exit 1
-update_susfs || exit 1
+# LKM userspace tools are tied to the running kernel interface. Never replace
+# YukiSU/BakaSU/other manager-owned ksu_susfs during installation. The
+# bundled, verified binary remains available as a fallback if none is installed.
+# An explicit --force-update still uses the pinned updater with rollback.
+ui_print "[+] Preserving the existing kernel-manager SUSFS tool (no automatic replacement)"
+ui_print "[*] Run SusAF --compat-check before enabling runtime policies"
 
 chmod 755 "$MODPATH/SusAF.sh" "$MODPATH/ReSuSFS.sh"
 chmod 644 "$MODPATH/post-fs-data.sh" "$MODPATH/service.sh" "$MODPATH/uninstall.sh" 2>/dev/null
