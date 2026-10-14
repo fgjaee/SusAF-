@@ -294,7 +294,17 @@ apply_kernel_umount_mounts() {
 	broad_count=0
 	reject_count=0
 	fail_count=0
-	"$ksu_bin" kernel umount list > "$registered_file" 2>/dev/null || : > "$registered_file"
+	# Do not equate "list unsupported" with an empty kernel registry.
+	# YukiSU and several KernelSU-family versions expose feature checks but no
+	# reliable `kernel umount list` subcommand. We cannot safely deduplicate or
+	# verify the existing registry without a successful read-only query.
+	if ! "$ksu_bin" kernel umount list > "$registered_file" 2> "$error_file"; then
+		kernel_umount_report "registry=unavailable"
+		kernel_umount_report "result=list-interface-unavailable"
+		rm -f "$candidate_file" "$accepted_file" "$registered_file" "$registered_next" "$error_file"
+		kernel_umount_finish_report
+		return 1
+	fi
 
 	if [ "$auto" = "1" ]; then
 		collect_kernel_umount_candidates "$mountinfo_file" "$candidate_file" || {
