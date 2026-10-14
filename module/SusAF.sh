@@ -16,6 +16,7 @@ SUSFS_MIN_VERSION="v2.2.0"
 . "$MODDIR/lib/diagnostics.sh"
 . "$MODDIR/lib/backup-restore.sh"
 . "$MODDIR/lib/coverage.sh"
+. "$MODDIR/lib/lkm-compat.sh"
 
 versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
 
@@ -405,6 +406,7 @@ show_help () {
 	printf " --stage-early \t\t\t\tpost-fs-data stage only\n"
 	printf " --stage-late \t\t\t\tboot-completed stage only\n"
 	printf " --status \t\t\t\tshow susfs version / variant / enabled features\n"
+	printf " --compat-check \t\t\tread-only built-in/LKM kernel backend preflight\n"
 	printf " --force-update \t\t\tinstall the release-pinned, verified SuSFS binary\n"
 	printf " --export-config \t\t\texport a validated Sus'AF configuration archive\n"
 	printf " --restore-config <archive> \t\tstage, validate, and restore a Sus'AF archive\n"
@@ -440,7 +442,18 @@ show_help () {
 	printf " --help \t\t\t\tdisplays this message\n"
 }
 
+# Automatic startup tasks must never write policies against an unavailable or
+# incompatible LKM backend. Explicit scans, status, diagnostics and backups
+# remain accessible for troubleshooting. The manual apply API is deliberately
+# not used automatically when this preflight fails.
 case "$1" in
+    --action|--stage-early|--stage-late|--autopilot-boot|--run-postfs-scripts|--run-bootcompleted-scripts|--coverage-apply|--coverage-apply-safe)
+        susaf_compat_require || exit 1
+        ;;
+esac
+
+case "$1" in
+    --compat-check) susaf_compat_report; exit ;;
 	--action) action; exit ;;
 	--stage-early) stage_early; exit ;;
 	--stage-late) stage_late; exit ;;
