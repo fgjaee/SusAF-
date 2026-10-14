@@ -18,6 +18,7 @@ SUSFS_MIN_VERSION="v2.2.0"
 . "$MODDIR/lib/coverage.sh"
 . "$MODDIR/lib/lkm-compat.sh"
 . "$MODDIR/lib/ksu-readonly.sh"
+. "$MODDIR/lib/lkm-proc.sh"
 
 versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
 
@@ -409,6 +410,7 @@ show_help () {
 	printf " --status \t\t\t\tshow susfs version / variant / enabled features\n"
 	printf " --compat-check \t\t\tread-only built-in/LKM kernel backend preflight\n"
 	printf " --ksu-only-audit \t\tread-only KernelSU feature and mount audit (no SUSFS required)\n"
+	printf " --lkm-proc-check \t\tread-only SUSFS guard LKM proc interface inventory\n"
 	printf " --force-update \t\t\tinstall the release-pinned, verified SuSFS binary\n"
 	printf " --export-config \t\t\texport a validated Sus'AF configuration archive\n"
 	printf " --restore-config <archive> \t\tstage, validate, and restore a Sus'AF archive\n"
@@ -457,6 +459,7 @@ esac
 case "$1" in
     --compat-check) susaf_compat_report; exit ;;
     --ksu-only-audit) susaf_ksu_readonly_audit; exit ;;
+    --lkm-proc-check) susaf_lkm_proc_report; exit ;;
 	--action) action; exit ;;
 	--stage-early) stage_early; exit ;;
 	--stage-late) stage_late; exit ;;
