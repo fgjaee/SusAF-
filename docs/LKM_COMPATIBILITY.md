@@ -110,3 +110,21 @@ KernelSU's supported features are **not automatically enabled**,
 and kernel-only audit does not claim that the separate SUSFS hiding
 operations work. Do not automatically generate or apply broad APEX
 or hosts unmount rules based only on a manager feature check.
+
+### LKM guard `/proc` interface (read-only discovery)
+
+The current upstream `inforcqb/susfs4ksu-lkm` uses
+`/proc/susfs_hide_mounts`, `/proc/susfs_hide_modules`,
+`/proc/susfs_path`, `/proc/susfs_kstat`,
+`/proc/susfs_open_redirect`, `/proc/susfs_avc_spoof`, and
+`/proc/susfs_enable_log` when loaded with `expose_proc=1`.
+Source: `PROC_INTERFACES.en.md` in the upstream repository.
+
+`SusAF --lkm-proc-check` inventories **only the presence and
+readability** of those seven nodes. It never prints stored rules
+(which might expose personal paths) or issues an LKM control write.
+Absent or partially available nodes cannot be used to authorize
+automatic SUSFS policy application; backend feature ABI and compatibility
+must first be independently validated on-device. The separate
+`ksu_susfs show` tool is still required for the old policy runner.
+An alternative proc-write adapter is **not** yet implemented.
