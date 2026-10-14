@@ -76,3 +76,37 @@ to improve a detector score.
 - inspect mounts across normal and isolated app namespaces before and after;
 - preserve the existing YukiSU/BakaSU, Vector, Re-Malwack, and TEE Sim setup;
 - no automatic reboot or unsafe broad mount-hiding.
+
+## No SUSFS on the October 14 OnePlus (verified)
+
+The device's read-only STEP 78 output showed:
+
+- kernel `5.15.167-android13-8-o-01140-g043e86cdd499`, arm64;
+- YukiSU/BakaSU `ksud 1.7.0-5f85169d` (UAPI 5);
+- `feature check kernel_umount` -> `supported`;
+- `feature check selinux_hide` -> `supported`;
+- **no** detected SUSFS module, `/sys/module` entry or installed
+  `ksu_susfs` tool.
+
+Sus'AF must report **SUSFS unavailable** on this device: KernelSU LKM
+root support is not the SUSFS LKM. The GitHub-hosted SUSFS LKM loader at
+`matsuzaka-yuki/susfs-lkm-module` distributes an android13-5.15 KMI
+build, but its README explicitly states its other KMIs besides
+android15-6.6 have *not* been validated on-device; this is not proof
+of safety on the OnePlus vendor kernel. Do not load it as part of
+these changes.
+
+### Read-only KernelSU-only mode
+
+`SusAF --ksu-only-audit` uses the existing trusted `ksud` resolver
+and calls only `feature check` and `feature get` for
+`kernel_umount` and `selinux_hide`. It reports mountpoints from
+`/proc/1/mountinfo`, including the known Vector ART and Re-Malwack
+hosts targets. The audit never calls `feature set`,
+`kernel umount add`, `notify-module-mounted`, `insmod`, `umount`, or
+`resetprop`.
+
+KernelSU's supported features are **not automatically enabled**,
+and kernel-only audit does not claim that the separate SUSFS hiding
+operations work. Do not automatically generate or apply broad APEX
+or hosts unmount rules based only on a manager feature check.
