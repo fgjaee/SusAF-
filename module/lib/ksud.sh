@@ -36,6 +36,7 @@ resolve_ksud_bin() {
 	for package in \
 		com.rifsxd.ksunext \
 		com.resukisu.resukisu \
+		com.anatdx.yukisu \
 		me.weishu.kernelsu \
 		com.sukisu.ultra
 	do
