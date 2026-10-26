@@ -203,6 +203,13 @@ generate_diagnostics() {
 			susfs_status=unsupported
 		fi
 	fi
+	# LKM publishes its own control endpoints even when the universal helper
+	# cannot interrogate its version. Report a live transport, not a missing kernel.
+	if [ -r /proc/susfs_path ] && [ -r /proc/susfs_kstat ] && [ -r /proc/susfs_hide_mounts ]; then
+		susfs_status=active
+		susfs_variant=GKI-LKM
+		[ -n "$susfs_version" ] || susfs_version=procfs
+	fi
 	[ -n "$susfs_version" ] || susfs_version=unavailable
 	[ -n "$susfs_variant" ] || susfs_variant=unavailable
 	[ -n "$features" ] || features=none
@@ -309,6 +316,11 @@ generate_diagnostics() {
 		diagnostics_put susfs.feature_count "$feature_count"
 		diagnostics_put susfs.features "$features"
 		diagnostics_put susfs.capability_source "runtime"
+		if [ -r /proc/susfs_path ] && [ -r /proc/susfs_kstat ] && [ -r /proc/susfs_hide_mounts ]; then
+			diagnostics_put susfs.transport "lkm-procfs"
+		else
+			diagnostics_put susfs.transport "ksu_susfs"
+		fi
 
 		diagnostics_put kernelsu.version "$ksu_version"
 		diagnostics_put kernelsu.binary "${ksu_bin:-unavailable}"
