@@ -105,8 +105,15 @@ susfs_has_command() {
 	command_name="$1"
 	if susfs_lkm_active; then
 		case "$command_name" in
-			add_sus_path|add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|enable_log|enable_avc_log_spoofing) return 0 ;;
+			add_sus_path|add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|enable_log|enable_avc_log_spoofing)
+				[ -w "$(susfs_lkm_node "$command_name")" ]
+				return $?
+				;;
 		esac
+		# An LKM does not imply that the standard ioctl helper supports
+		# unrelated commands. Do not advertise an unprobed helper.
+		[ -x "$SUSFS_BIN" ] || return 1
+		[ -n "$(susfs_help)" ] || [ -n "$(susfs_version_value)" ] || return 1
 	fi
 	[ -n "$command_name" ] || return 1
 
@@ -226,6 +233,10 @@ susfs() {
 	esac
 
 	if susfs_managed_command "$cmd" && ! susfs_has_command "$cmd"; then
+		if susfs_lkm_active; then
+			echo "[x] unsupported LKM operation: $cmd"
+			return 2
+		fi
 		echo "[*] skip unsupported SUSFS command: $cmd"
 		return 0
 	fi
@@ -272,6 +283,8 @@ susfs_set_mount_filter() {
 			;;
 		*)
 			echo "[*] mount filtering is not supported by this SUSFS kernel/helper"
+			# For an active LKM, a missing helper must not look like success.
+			susfs_lkm_active && return 2
 			return 0
 			;;
 	esac
@@ -505,14 +518,17 @@ emit_feature_registry() {
 
 show_capabilities() {
 	if susfs_lkm_active; then
-		printf "SUSFS_AVAILABLE=1\nSUSFS_SOURCE=lkm-procfs\nSUSFS_VARIANT=GKI-LKM\n"
+		printf 'SUSFS_AVAILABLE=1\nSUSFS_SOURCE=lkm-procfs\nSUSFS_VARIANT=GKI-LKM\n'
+		printf 'SUSFS_VERSION=unknown\nSUSFS_BINARY=%s\n' "$SUSFS_BIN"
 		for node in path kstat open_redirect hide_mounts hide_modules enable_log avc_spoof opath; do
 			[ -e "/proc/susfs_$node" ] && printf "LKM_NODE=%s\n" "$node"
 		done
 		for cmd in add_sus_path add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect enable_log enable_avc_log_spoofing; do
 			emit_susfs_command_capability "$cmd"
 		done
-		printf "MOUNT_FILTER_BACKEND=unavailable\n"
+		printf 'MOUNT_FILTER_BACKEND=%s\n' "$(susfs_mount_filter_backend)"
+		printf 'UMOUNT_BACKEND=%s\n' "$(susfs_preferred_umount_backend)"
+		emit_feature_registry
 		return 0
 	fi
 	if [ ! -x "$SUSFS_BIN" ]; then
