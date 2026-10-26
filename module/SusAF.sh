@@ -412,6 +412,10 @@ run() {
 action() { run; }
 
 show_status() {
+	if susfs_lkm_active; then
+		show_capabilities
+		return $?
+	fi
 	susfs show version
 	susfs show variant
 	susfs show enabled_features
