@@ -6,6 +6,45 @@
 # module version: ask the installed ksu_susfs helper and enabled kernel
 # features, then expose a stable interface to the rest of Sus'AF.
 
+# LKM procfs transport (inforcqb susfs4ksu-lkm v2.3.0-r18.4).
+# Do not equate an installed .ko with an initialized interface.
+susfs_lkm_active() {
+    [ -r /proc/susfs_path ] && [ -r /proc/susfs_kstat ] &&
+    [ -r /proc/susfs_hide_mounts ]
+}
+susfs_lkm_node() {
+    case "$1" in
+        add_sus_path) echo /proc/susfs_path ;;
+        add_sus_kstat|add_sus_kstat_statically|update_sus_kstat) echo /proc/susfs_kstat ;;
+        add_open_redirect) echo /proc/susfs_open_redirect ;;
+        enable_log) echo /proc/susfs_enable_log ;;
+        enable_avc_log_spoofing) echo /proc/susfs_avc_spoof ;;
+        *) return 1 ;;
+    esac
+}
+susfs_lkm_write() {
+    cmd="$1"; shift
+    node=$(susfs_lkm_node "$cmd") || return 2
+    [ -w "$node" ] || return 1
+    case "$cmd" in
+        enable_log|enable_avc_log_spoofing)
+            [ "$#" -eq 1 ] || return 2
+            case "$1" in 0|1) ;; *) return 2 ;; esac
+            printf '%s\n' "$1" > "$node" ;;
+        add_sus_path|add_sus_kstat|update_sus_kstat)
+            [ "$#" -eq 1 ] || return 2
+            printf '%s %s\n' "$cmd" "$1" > "$node" ;;
+        add_sus_kstat_statically)
+            [ "$#" -eq 13 ] || return 2
+            printf '%s %s\n' "$cmd" "$*" > "$node" ;;
+        add_open_redirect)
+            [ "$#" -eq 3 ] || return 2
+            case "$3" in 0|1|2|3|4) ;; *) return 2 ;; esac
+            printf '%s %s\n' "$cmd" "$*" > "$node" ;;
+        *) return 2 ;;
+    esac
+}
+
 SUSFS_FEATURES_READY=0
 SUSFS_HELP_READY=0
 SUSFS_VERSION_READY=0
@@ -61,6 +100,11 @@ susfs_has_feature() {
 
 susfs_has_command() {
 	command_name="$1"
+	if susfs_lkm_active; then
+		case "$command_name" in
+			add_sus_path|add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|enable_log|enable_avc_log_spoofing) return 0 ;;
+		esac
+	fi
 	[ -n "$command_name" ] || return 1
 
 	# Sidex's universal helper exposes only commands supported by the detected
@@ -167,6 +211,13 @@ susfs_managed_command() {
 
 susfs() {
 	cmd="$1"
+	if susfs_lkm_active; then
+		case "$cmd" in
+			add_sus_path|add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|enable_log|enable_avc_log_spoofing)
+				susfs_lkm_write "$@"
+				return $? ;;
+		esac
+	fi
 	case "$cmd" in
 		show|--help) "$SUSFS_BIN" "$@"; return $? ;;
 	esac
@@ -263,6 +314,10 @@ susfs_prepare_path_roots() {
 }
 
 susfs_add_open_redirect() {
+	if susfs_lkm_active; then
+		susfs add_open_redirect "$1" "$2" "${3:-2}"
+		return $?
+	fi
 	target="$1"
 	redirect="$2"
 	scheme="${3:-2}"
@@ -446,6 +501,17 @@ emit_feature_registry() {
 }
 
 show_capabilities() {
+	if susfs_lkm_active; then
+		printf "SUSFS_AVAILABLE=1\nSUSFS_SOURCE=lkm-procfs\nSUSFS_VARIANT=GKI-LKM\n"
+		for node in path kstat open_redirect hide_mounts hide_modules enable_log avc_spoof opath; do
+			[ -e "/proc/susfs_$node" ] && printf "LKM_NODE=%s\n" "$node"
+		done
+		for cmd in add_sus_path add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect enable_log enable_avc_log_spoofing; do
+			emit_susfs_command_capability "$cmd"
+		done
+		printf "MOUNT_FILTER_BACKEND=unavailable\n"
+		return 0
+	fi
 	if [ ! -x "$SUSFS_BIN" ]; then
 		printf 'SUSFS_AVAILABLE=0\n'
 		printf 'SUSFS_BINARY=%s\n' "$SUSFS_BIN"
