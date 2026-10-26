@@ -33,7 +33,10 @@ susfs_lkm_write() {
             printf '%s\n' "$1" > "$node" ;;
         add_sus_path|add_sus_kstat|update_sus_kstat)
             [ "$#" -eq 1 ] || return 2
-            printf '%s %s\n' "$cmd" "$1" > "$node" ;;
+            case "$cmd" in
+                add_sus_path) printf 'add %s\n' "$1" > "$node" ;;
+                *) printf '%s %s\n' "$cmd" "$1" > "$node" ;;
+            esac ;;
         add_sus_kstat_statically)
             [ "$#" -eq 13 ] || return 2
             printf '%s %s\n' "$cmd" "$*" > "$node" ;;
