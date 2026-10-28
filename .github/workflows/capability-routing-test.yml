@@ -48,12 +48,12 @@ jobs:
         working-directory: webui
         run: pnpm build
 
-      - name: Configure Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Android build tools
         run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          set -eu
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build ordinary-app visibility probe
         run: |
