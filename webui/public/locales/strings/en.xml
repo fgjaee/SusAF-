@@ -252,7 +252,7 @@
     <string name="coverage_apply_generated">Apply generated fixes</string>
     <string name="coverage_verify">Verify</string>
     <string name="coverage_rollback">Undo last changes</string>
-    <string name="coverage_limits">Sus'AF attempts every supported correction and verifies its own policy. TEE verdicts, anonymous-memory hooks, and kernel behavior without an installed hook are reported honestly instead of being marked fixed.</string>
+    <string name="coverage_limits">Policy verification checks configured rules and supported kernel operations. Root-side observations are not proof of visibility to ordinary apps; TEE verdicts, anonymous-memory hooks, and unsupported kernel behavior remain outside the audit.</string>
     <string name="coverage_result_app">Focused audit: %s</string>
     <string name="coverage_result_autopilot">Full-device Autopilot audit</string>
     <string name="coverage_process_detail">%s readable process map(s)</string>
@@ -303,10 +303,11 @@
     <string name="coverage_applied">Applied %s generated correction(s). Reboot for a clean namespace verification.</string>
     <string name="coverage_verified">Verification completed. No active issues were found.</string>
     <string name="coverage_verified_stale">Verification passed. Inactive configured rules were left in place.</string>
-    <string name="coverage_verify_clean">Verified clean</string>
-    <string name="coverage_verify_clean_with_stale">Verified clean · inactive rules retained</string>
+    <string name="coverage_verify_clean">Configured policy checks passed · app visibility unverified</string>
+    <string name="coverage_verify_clean_with_stale">Policy checks passed · inactive rules retained · app visibility unverified</string>
     <string name="coverage_verify_attention">Verification needs attention</string>
     <string name="coverage_verify_detail">%1$s inactive configured rule(s) · %2$s mount failure(s) · %3$s remaining correction(s)</string>
+    <string name="coverage_verify_app_not_tested">Ordinary-app visibility has not been tested</string>
     <string name="coverage_verify_runtime_unavailable">Kernel verification incomplete · feature: %1$s · mount policy: %2$s</string>
     <string name="coverage_verify_attention_detail">Verification found active issues. The exact counts are shown below.</string>
     <string name="coverage_progress_audit">Auditing your device</string>
