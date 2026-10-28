@@ -445,7 +445,7 @@ function selectedCoverageIds() {
 function renderExposureEvidence(values) {
     const section = document.getElementById('coverage-evidence');
     if (!section) return;
-    if (values['exposure.schema'] !== '1') {
+    if (values['exposure.schema'] !== '2') {
         section.hidden = true;
         return;
     }
@@ -457,10 +457,14 @@ function renderExposureEvidence(values) {
     list.replaceChildren();
 
     const result = values['exposure.result'] || 'unavailable';
+    const probeStatus = values['exposure.probe_status'] || 'not-run';
+    const probeStatusKey = `coverage_probe_status_${probeStatus.replaceAll('-', '_')}`;
+    const probeStatusText = getString(probeStatusKey);
     const key = 'coverage_evidence_result_' + result.replaceAll('-', '_');
     const label = getString(key);
     status.textContent = getString('coverage_evidence_count', String(count)) +
-        ' · ' + (label === key ? result : label);
+        ' · ' + (label === key ? result : label) +
+        ' · ' + (probeStatusText === probeStatusKey ? probeStatus : probeStatusText);
     const countText = values['exposure.truncated'] === '1'
         ? getString('coverage_evidence_truncated') : '';
     if (countText) status.textContent += ' · ' + countText;
@@ -481,7 +485,10 @@ function renderExposureEvidence(values) {
             values[`exposure.${i}.backend_supported`] || 'not-checked'
         );
         const verification = document.createElement('small');
-        verification.textContent = getString('coverage_evidence_unverified');
+        const state = values[`exposure.${i}.app_visibility`] || 'not-tested';
+        const stateKey = `coverage_evidence_visibility_${state.replaceAll('-', '_')}`;
+        const stateLabel = getString(stateKey);
+        verification.textContent = stateLabel === stateKey ? state : stateLabel;
         item.append(name, metadata, verification);
         list.appendChild(item);
     }
@@ -745,7 +752,30 @@ printf '%s\n' "$OUT"
     }
 }
 
+async function installVisibilityProbe() {
+    const dialog = document.getElementById('coverage-probe-install-dialog');
+    dialog.close();
+    setCoverageBusy(true);
+    const apk = `${moduleDirectory}/probe/SusAF-Visibility-Probe.apk`;
+    try {
+        const result = await exec(`pm install -r --user 0 "${apk}"`);
+        if (result.errno !== 0 || !/Success/i.test(result.stdout || '')) {
+            setCoverageMessage(getString('coverage_probe_install_failed'), true);
+            return;
+        }
+        showPrompt(getString('coverage_probe_install_success'));
+        const packageName = currentCoverage?.mode === 'app' && currentCoverage.package !== 'none'
+            ? currentCoverage.package : '';
+        await loadCoverage(true, packageName);
+    } finally {
+        setCoverageBusy(false);
+    }
+}
+
 export function mount() {
+    document.getElementById('coverage-probe-install').onclick = () => document.getElementById('coverage-probe-install-dialog').show();
+    document.getElementById('coverage-probe-install-cancel').onclick = () => document.getElementById('coverage-probe-install-dialog').close();
+    document.getElementById('coverage-probe-install-approve').onclick = () => installVisibilityProbe();
     document.getElementById('diagnostics-refresh').onclick = () => loadDiagnostics(true);
     document.getElementById('diagnostics-export').onclick = () => exportDiagnostics();
     document.getElementById('coverage-system-scan').onclick = () => loadCoverage(true);
