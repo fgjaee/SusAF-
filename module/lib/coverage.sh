@@ -342,6 +342,10 @@ coverage_scan() {
 	else
 		: > "$exposures" || return 1
 	fi
+	coverage_progress_write verifying_app 0 0 running checking_unprivileged_view
+	if command -v probe_verify_file >/dev/null 2>&1; then
+		probe_verify_file "$exposures" || return 1
+	fi
 	coverage_progress_write finalizing 0 0 running generating_policy
 	awk -F '\t' '!seen[$1 FS $2]++' "$candidates" > "$unique"
 	missing_total=$(( $(coverage_missing_count "$PERSISTENT_DIR/sus_maps.txt") + $(coverage_missing_count "$PERSISTENT_DIR/sus_paths.txt") + $(coverage_missing_count "$PERSISTENT_DIR/sus_paths_loop.txt") ))
