@@ -11,7 +11,8 @@ STATE_DIR="$PERSISTENT_DIR/state"
 PROC_ROOT="$TEST_ROOT/proc"
 MAP_ROOT="$TEST_ROOT/data/adb/modules"
 mkdir -p "$PERSISTENT_DIR" "$STATE_DIR" "$PROC_ROOT/4321" \
-	"$MAP_ROOT/target/lib64" "$MAP_ROOT/unrelated/lib64" "$TEST_ROOT/bin"
+	"$MAP_ROOT/target/lib64" "$MAP_ROOT/unrelated/lib64" "$TEST_ROOT/bin" \
+	"$TEST_ROOT/tmp" "$TEST_ROOT/apex/bin"
 
 printf '# exact map targets\n%s\n' "$MAP_ROOT/target/lib64/already.so" > "$PERSISTENT_DIR/sus_maps.txt"
 printf '# paths\n' > "$PERSISTENT_DIR/sus_paths.txt"
@@ -42,6 +43,8 @@ EOF
 printf 'mapped\n' > "$MAP_ROOT/target/lib64/already.so"
 printf 'candidate\n' > "$MAP_ROOT/target/lib64/exact-candidate.so"
 printf 'unrelated\n' > "$MAP_ROOT/unrelated/lib64/not-mapped.so"
+printf 'running\n' > "$TEST_ROOT/tmp/ksud"
+printf 'apex\n' > "$TEST_ROOT/apex/bin/su"
 
 cat > "$PROC_ROOT/4321/maps" <<EOF
 70000000-70001000 r--p 00000000 103:06 100 $MAP_ROOT/target/lib64/already.so
@@ -71,6 +74,8 @@ export SUSAF_PROC_ROOT="$PROC_ROOT"
 export SUSAF_COVERAGE_MAP_ROOTS="$MAP_ROOT"
 export SUSAF_COVERAGE_REQUIRE_EXISTS=1
 export SUSAF_MOUNTINFO="$TEST_ROOT/mountinfo"
+export SUSAF_EXPOSURE_TMP_ROOT="$TEST_ROOT/tmp"
+export SUSAF_EXPOSURE_APEX_SU="$TEST_ROOT/apex/bin/su"
 
 get_conf() {
 	key="$1"
@@ -83,6 +88,7 @@ get_conf() {
 
 . "$ROOT/module/lib/kernel-umount.sh"
 . "$ROOT/module/lib/coverage.sh"
+. "$ROOT/module/lib/exposure-audit.sh"
 
 output=$(coverage_scan com.example.detector)
 report="$STATE_DIR/coverage.report.txt"
@@ -92,6 +98,12 @@ grep -Fqx 'mode=app' "$report"
 grep -Fqx 'package=com.example.detector' "$report"
 grep -Fqx 'process.count=1' "$report"
 grep -Fqx 'candidate.count=3' "$report"
+grep -Fqx 'exposure.count=2' "$report"
+grep -Fqx 'exposure.result=observed-unverified' "$report"
+grep -Fqx 'exposure.app_visibility=not-tested' "$report"
+grep -Fqx 'exposure.policy_action=none' "$report"
+grep -Fq "$TEST_ROOT/tmp/ksud" "$report"
+grep -Fq "$TEST_ROOT/apex/bin/su" "$report"
 grep -Fqx 'candidate.safe=1' "$report"
 grep -Fqx 'candidate.risky=2' "$report"
 grep -Fqx 'candidate.sus_maps=1' "$report"
@@ -140,6 +152,8 @@ grep -Fqx "$MAP_ROOT/target/lib64/exact-candidate.so" "$PERSISTENT_DIR/sus_maps.
 ! grep -Fqx '/system/etc/hosts' "$PERSISTENT_DIR/kernel_umount.txt"
 printf '%s\n' "$apply_output" | grep -Fqx 'result=applied'
 printf '%s\n' "$apply_output" | grep -Fqx 'added.sus_maps=1'
+[ -f "$TEST_ROOT/tmp/ksud" ]
+[ -f "$TEST_ROOT/apex/bin/su" ]
 checkpoint=$(printf '%s\n' "$apply_output" | sed -n 's/^checkpoint=//p')
 [ -d "$checkpoint" ]
 grep -Fqx "$MAP_ROOT/target/lib64/already.so" "$checkpoint/sus_maps.txt"
