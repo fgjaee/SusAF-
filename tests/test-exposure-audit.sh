@@ -37,7 +37,7 @@ evidence="$TEST_ROOT/evidence.tsv"
 exposure_scan "$evidence"
 output=$(exposure_emit_report "$evidence")
 
-printf '%s\n' "$output" | grep -Fqx 'exposure.schema=1'
+printf '%s\n' "$output" | grep -Fqx 'exposure.schema=2'
 printf '%s\n' "$output" | grep -Fqx 'exposure.count=5'
 printf '%s\n' "$output" | grep -Fqx 'exposure.result=observed-unverified'
 printf '%s\n' "$output" | grep -Fqx 'exposure.app_visibility=not-tested'
