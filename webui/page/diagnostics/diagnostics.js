@@ -513,7 +513,7 @@ function renderCoverage(values) {
             values['mount.high_id_namespaces'] || '0'
         );
     document.getElementById('coverage-map-candidates').textContent = values['candidate.sus_maps'] || '0';
-    document.getElementById('coverage-path-candidates').textContent = values['candidate.sus_paths_loop'] || '0';
+    document.getElementById('coverage-path-candidates').textContent = String(Number(values['candidate.sus_paths_loop'] || 0) + Number(values['candidate.sus_paths'] || 0));
     document.getElementById('coverage-mount-candidates').textContent = values['candidate.kernel_umount'] || '0';
     document.getElementById('coverage-spoof-candidates').textContent = values['candidate.spoof'] || '0';
     document.getElementById('coverage-rollback').disabled = values['rollback.available'] !== '1';
@@ -635,6 +635,7 @@ async function applyCoverageIds(ids) {
     const outcome = parseDiagnostics(result.stdout);
     const added = Number.parseInt(outcome['added.sus_maps'] || '0', 10)
         + Number.parseInt(outcome['added.sus_paths_loop'] || '0', 10)
+        + Number.parseInt(outcome['added.sus_paths'] || '0', 10)
         + Number.parseInt(outcome['added.kernel_umount'] || '0', 10)
         + Number.parseInt(outcome['changed.config'] || '0', 10);
     showPrompt(getString('coverage_applied', added));
