@@ -279,11 +279,13 @@
     <string name="coverage_process_detail">%s readable process map(s)</string>
     <string name="coverage_autopilot_detail">%1$s running app process(es), %2$s mount namespace(s), %3$s with high mount IDs</string>
     <string name="coverage_type_sus_map">SUS_MAP</string>
+    <string name="coverage_type_sus_path">SUS_PATH static</string>
     <string name="coverage_type_sus_path_loop">SUS_PATH loop</string>
     <string name="coverage_type_kernel_umount">Kernel umount</string>
     <string name="coverage_type_config_toggle">SuSFS control</string>
     <string name="coverage_type_kernel_feature">KernelSU spoof control</string>
     <string name="coverage_action_hide_map">Hide mapped file</string>
+    <string name="coverage_action_hide_path_static">Hide artifact (static rule)</string>
     <string name="coverage_action_hide_path">Hide filesystem artifact</string>
     <string name="coverage_action_hide_mount">Hide visible mount</string>
     <string name="coverage_action_spoof_mount_view">Spoof application mount view</string>
@@ -297,6 +299,7 @@
     <string name="coverage_reason_recovery_artifact">A known recovery artifact currently exists.</string>
     <string name="coverage_reason_root_tool_artifact">A root-capable tool artifact currently exists.</string>
     <string name="coverage_reason_su_binary">A su binary exists at a commonly tested location.</string>
+    <string name="coverage_reason_app_visible_root_artifact">A real unprivileged app can stat this runtime artifact. Hiding it could disrupt an active root session; manual review required.</string>
     <string name="coverage_reason_root_runtime_path">A root runtime path currently exists.</string>
     <string name="coverage_reason_root_module_path">The root-module directory currently exists.</string>
     <string name="coverage_reason_susaf_runtime_path">The Sus'AF runtime directory currently exists.</string>
@@ -313,7 +316,7 @@
     <string name="coverage_risk_medium">Risk notice</string>
     <string name="coverage_risk_high">High risk</string>
     <string name="coverage_risk_title">Review risky corrections</string>
-    <string name="coverage_risk_message">These corrections may change application behavior or mount visibility. Sus'AF will create a rollback checkpoint before applying them.</string>
+    <string name="coverage_risk_message">These changes can alter application behavior or disrupt active root infrastructure. A configuration checkpoint is created first; kernel rules may require a reboot to undo.</string>
     <string name="coverage_apply_anyway">Apply anyway</string>
     <string name="coverage_scanning">Scanning current state…</string>
     <string name="coverage_not_scanned">No saved coverage scan yet.</string>
