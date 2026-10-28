@@ -62,14 +62,13 @@ types and names associated with root runtimes. No file contents or socket
 payloads are opened. Missing/unavailable scan locations and truncation are
 reported explicitly.
 
-These are **observations**, not generated correction candidates. For each
+These are **observations**, not automatic corrections. When the independently installed app probe confirms a path is visible to its unprivileged Android UID, and the active backend can apply a matching rule, Sus’AF also offers that exact path as a **high-risk, review-required candidate**. No such candidate is auto-applied. For each
 observation, the report records its path, type, configuration-list status,
 backend support class (`loop`, `static-only`, `unsupported`, or
 `not-checked`), and the deliberately explicit results
-`operation_result=not-attempted`, `app_visibility=not-tested`,
-`verification_method=none`. A root-shell observation does not prove the
-same path is visible from an unprivileged app. The scanner never registers
-hiding rules for these observations automatically.
+`operation_result=not-attempted`, `app_visibility=not-tested` until the app is installed, and
+`verification_method=none` or `companion-contentprovider`. A root-shell observation does not prove the
+same path is visible from an unprivileged app. The scanner never registers hiding rules automatically; proposed app-visible corrections require explicit risk review and use the existing checkpoint/rollback workflow. Full details: [Full Visibility Audit](APP_VISIBILITY_PROBE.md).
 
 The WebUI shows these findings in a separate read-only section. The scan
 report remains private under `/data/adb/SusAF/state/coverage.report.txt`.
