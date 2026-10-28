@@ -95,34 +95,67 @@ exposure_scan() {
 }
 
 exposure_emit_report() {
-    local file="$1" count index=0 path type scope configured backend
+    local file="$1" count index=0 path type scope configured backend app_state app_uid
+    local visible missing denied errors checked=0 verification overall=not-tested
     count=$(awk 'END { print NR + 0 }' "$file")
-    coverage_put exposure.schema 1
+    visible=$(awk -F '\t' '$6=="VISIBLE" { n++ } END { print n+0 }' "$file")
+    missing=$(awk -F '\t' '$6=="MISSING" { n++ } END { print n+0 }' "$file")
+    denied=$(awk -F '\t' '$6=="DENIED" { n++ } END { print n+0 }' "$file")
+    errors=$(awk -F '\t' '$6=="ERROR" || $6=="INVALID" { n++ } END { print n+0 }' "$file")
+    checked=$((visible + missing + denied + errors))
+    if [ "$checked" -gt 0 ]; then
+        if [ "$checked" -eq "$count" ]; then verification=checked
+        else verification=partial
+        fi
+    fi
+    coverage_put exposure.schema 2
     coverage_put exposure.observer root-shell
     coverage_put exposure.tmp_check "$EXPOSURE_TMP_CHECK"
     coverage_put exposure.apex_check "$EXPOSURE_APEX_CHECK"
     coverage_put exposure.truncated "$EXPOSURE_TRUNCATED"
     coverage_put exposure.count "$count"
-    coverage_put exposure.app_visibility not-tested
-    coverage_put exposure.verification_method none
+    coverage_put exposure.app_visibility "$verification"
+    coverage_put exposure.verification_method "$([ "$checked" -gt 0 ] && printf companion-contentprovider || printf none)"
+    coverage_put exposure.probe_status "${PROBE_STATUS:-not-run}"
+    coverage_put exposure.probe_uid "${PROBE_UID:-0}"
+    coverage_put exposure.visible_count "$visible"
+    coverage_put exposure.missing_count "$missing"
+    coverage_put exposure.denied_count "$denied"
+    coverage_put exposure.error_count "$errors"
     coverage_put exposure.policy_action none
-    if [ "$EXPOSURE_TMP_CHECK" != checked ] || { [ "$EXPOSURE_APEX_CHECK" != checked ] && [ "$EXPOSURE_APEX_CHECK" != absent ]; } || [ "$EXPOSURE_TRUNCATED" = 1 ]; then
-        coverage_put exposure.result incomplete
-    elif [ "$count" -gt 0 ]; then
-        coverage_put exposure.result observed-unverified
+    if [ "$EXPOSURE_TMP_CHECK" != checked ] ||
+        { [ "$EXPOSURE_APEX_CHECK" != checked ] && [ "$EXPOSURE_APEX_CHECK" != absent ]; } ||
+        [ "$EXPOSURE_TRUNCATED" = 1 ]; then
+        overall=incomplete
+    elif [ "$count" -eq 0 ]; then
+        overall=no-observations-unverified
+    elif [ "$visible" -gt 0 ]; then
+        overall=observed-app-visible
+    elif [ "$verification" = checked ]; then
+        overall=observed-app-not-visible
     else
-        coverage_put exposure.result no-observations-unverified
+        overall=observed-unverified
     fi
-    while IFS="$(printf '\t')" read -r path type scope configured backend || [ -n "$path$type$scope$configured$backend" ]; do
+    coverage_put exposure.result "$overall"
+    while IFS="$(printf '\t')" read -r path type scope configured backend app_state app_uid ||
+        [ -n "$path$type$scope$configured$backend$app_state$app_uid" ]; do
         [ -n "$path" ] || continue
         index=$((index + 1))
+        case "$app_state" in
+            VISIBLE) app_state=visible ;;
+            MISSING) app_state=not-found ;;
+            DENIED) app_state=permission-denied ;;
+            ERROR|INVALID) app_state=error ;;
+            *) app_state=not-tested ;;
+        esac
         coverage_put "exposure.$index.path" "$path"
         coverage_put "exposure.$index.type" "$type"
         coverage_put "exposure.$index.scope" "$scope"
         coverage_put "exposure.$index.configured" "$configured"
         coverage_put "exposure.$index.backend_supported" "$backend"
         coverage_put "exposure.$index.operation_result" not-attempted
-        coverage_put "exposure.$index.app_visibility" not-tested
-        coverage_put "exposure.$index.verification_method" none
+        coverage_put "exposure.$index.app_visibility" "$app_state"
+        coverage_put "exposure.$index.verification_method" "$([ "$app_state" != not-tested ] && printf companion-contentprovider || printf none)"
+        coverage_put "exposure.$index.probe_uid" "${app_uid:-0}"
     done < "$file"
 }
