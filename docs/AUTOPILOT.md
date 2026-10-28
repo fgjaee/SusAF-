@@ -49,8 +49,33 @@ mapped files beneath approved module/root-manager roots. Filesystem-artifact
 candidates must exist and belong to the curated catalog. Mount candidates must
 come from the validated live mount collector.
 
-The optional **Focused app audit** applies the same checks to a validated
-package name when one app needs to be isolated.
+The optional **Focused app audit** applies the process/mount checks to a
+validated package name; root-side filesystem observations remain device-wide
+and must **not** be interpreted as exposure specifically to that app.
+
+### Read-only runtime evidence (2026-10-28)
+
+Audit now separately checks direct entries beneath `/data/local/tmp` with
+bounded enumeration (64 matching paths by default), plus the exact optional
+`/apex/com.android.virt/bin/su` path. It recognizes file/symlink/socket
+types and names associated with root runtimes. No file contents or socket
+payloads are opened. Missing/unavailable scan locations and truncation are
+reported explicitly.
+
+These are **observations**, not generated correction candidates. For each
+observation, the report records its path, type, configuration-list status,
+backend support class (`loop`, `static-only`, `unsupported`, or
+`not-checked`), and the deliberately explicit results
+`operation_result=not-attempted`, `app_visibility=not-tested`,
+`verification_method=none`. A root-shell observation does not prove the
+same path is visible from an unprivileged app. The scanner never registers
+hiding rules for these observations automatically.
+
+The WebUI shows these findings in a separate read-only section. The scan
+report remains private under `/data/adb/SusAF/state/coverage.report.txt`.
+The scan's `result=ok` means execution completed, **not** that the device
+passed a detector or Google Play Integrity. The supported correction list
+and all existing Autopilot apply/rollback behavior remain unchanged.
 
 ## Generated policy
 
@@ -122,10 +147,12 @@ result without storing detector output in a public location.
 
 **Verify** rescans the policy and reports one of three persistent outcomes:
 
-- **Verified clean** when no supported correction remains and the enabled
-  KernelSU runtime layer reports success.
-- **Clean with inactive rules** when configured paths no longer exist. These
-  rules remain visible for cleanup but are not an active detection failure.
+- **Configured policy checks passed** when no supported correction remains
+  and the enabled KernelSU runtime layer reports success. App visibility
+  remains untested.
+- **Policy checks passed with inactive rules** when configured paths no longer
+  exist. These rules remain visible for cleanup but are not an active policy
+  failure; app visibility remains untested.
 - **Attention required** for remaining supported corrections, mount
   registration failures, or an unavailable KernelSU feature/mount interface.
 
