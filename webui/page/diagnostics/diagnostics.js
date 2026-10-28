@@ -396,9 +396,10 @@ function renderCoverageVerification(values) {
     const featureResult = values['kernel_umount.feature_result'] || 'not-recorded';
     const mountResult = values['kernel_umount.mount_result'] || 'not-recorded';
     runtime.className = 'coverage-verification-runtime';
-    runtime.textContent = values['runtime.available'] === '0'
+    const runtimeMessage = values['runtime.available'] === '0'
         ? getString('coverage_verify_runtime_unavailable', featureResult, mountResult)
         : '';
+    runtime.textContent = [runtimeMessage, getString('coverage_verify_app_not_tested')].filter(Boolean).join(' · ');
     panel.hidden = false;
 }
 
