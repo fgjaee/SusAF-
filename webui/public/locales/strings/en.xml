@@ -237,6 +237,17 @@
     <string name="coverage_spoof_candidates">New spoof fixes</string>
     <string name="coverage_exact_candidates">Generated policy</string>
     <string name="coverage_select_hint">Recommended fixes are selected automatically.</string>
+    <string name="coverage_evidence_title">Runtime artifact observations</string>
+    <string name="coverage_evidence_detail">Read-only results observed from a root shell. Ordinary-app visibility is NOT tested. These observations never trigger automatic hiding.</string>
+    <string name="coverage_evidence_empty">No matching artifacts observed in the checked locations. This does not prove an app sees a clean filesystem.</string>
+    <string name="coverage_evidence_count">Root-side observations: %s</string>
+    <string name="coverage_evidence_result_observed_unverified">Observed, app visibility unverified</string>
+    <string name="coverage_evidence_result_no_observations_unverified">Nothing observed, app visibility unverified</string>
+    <string name="coverage_evidence_result_incomplete">Some locations were not checked</string>
+    <string name="coverage_evidence_result_unavailable">Collector unavailable</string>
+    <string name="coverage_evidence_truncated">Results truncated</string>
+    <string name="coverage_evidence_metadata">Type: %1$s · Scope: %2$s · Config: %3$s · Backend: %4$s</string>
+    <string name="coverage_evidence_unverified">Observed by root shell · Not automatically changed · App visibility not tested</string>
     <string name="coverage_no_candidates">No new supported corrections were generated.</string>
     <string name="coverage_apply_generated">Apply generated fixes</string>
     <string name="coverage_verify">Verify</string>
