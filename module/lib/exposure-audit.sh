@@ -96,7 +96,7 @@ exposure_scan() {
 
 exposure_emit_report() {
     local file="$1" count index=0 path type scope configured backend app_state app_uid
-    local visible missing denied errors checked=0 verification overall=not-tested
+    local visible missing denied errors checked=0 verification=not-tested overall=not-tested
     count=$(awk 'END { print NR + 0 }' "$file")
     visible=$(awk -F '\t' '$6=="VISIBLE" { n++ } END { print n+0 }' "$file")
     missing=$(awk -F '\t' '$6=="MISSING" { n++ } END { print n+0 }' "$file")
