@@ -139,7 +139,7 @@ coverage_schedule_status() {
 coverage_add_candidate() {
 	local output="$1" kind="$2" target="$3" reason="$4" risk="$5" action="$6" scope="${7:-device}"
 	case "$kind" in
-		sus_map|sus_path_loop|kernel_umount) coverage_path_is_safe "$target" || return 1 ;;
+		sus_map|sus_path|sus_path_loop|kernel_umount) coverage_path_is_safe "$target" || return 1 ;;
 		config_toggle|kernel_feature) coverage_config_target_is_allowed "$target" || return 1 ;;
 		*) return 1 ;;
 	esac
@@ -320,6 +320,33 @@ coverage_collect_controls() {
 	coverage_add_candidate "$output" kernel_feature SELINUX_HIDE_MODE=enabled selinux_policy_visible medium spoof_selinux_status device
 }
 
+# Proposed corrections require independent app visibility, a supported
+# backend, and explicit user approval. The boot auto-apply path skips these
+# high-risk candidates. No wildcard policy is ever created.
+coverage_runtime_path_is_reviewable() {
+	coverage_path_is_safe "$1" || return 1
+	case "$1" in
+		/data/local/tmp/*|/apex/com.android.virt/bin/su) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+coverage_collect_exposure_candidates() {
+	local evidence="$1" output="$2" path type scope configured backend app_state app_uid
+	while IFS="$(printf '\t')" read -r path type scope configured backend app_state app_uid ||
+		[ -n "$path$type$scope$configured$backend$app_state$app_uid" ]; do
+		[ "$app_state" = VISIBLE ] || continue
+		[ "$configured" = not-listed ] || continue
+		coverage_runtime_path_is_reviewable "$path" || continue
+		case "$backend" in
+			loop)
+				coverage_add_candidate "$output" sus_path_loop "$path" app_visible_root_artifact high hide_path device ;;
+			static-only)
+				coverage_add_candidate "$output" sus_path "$path" app_visible_root_artifact high hide_path_static device ;;
+		esac
+	done < "$evidence"
+}
+
 coverage_scan() {
 	local package="${1:-}" operation="${2:-audit}" state_dir="$PERSISTENT_DIR/state" output temp candidates unique exposures kernel_report feature_report
 	local kind target reason risk action scope index candidate_count map_count path_count mount_count spoof_count low_count risky_count missing_total
@@ -346,6 +373,7 @@ coverage_scan() {
 	if command -v probe_verify_file >/dev/null 2>&1; then
 		probe_verify_file "$exposures" || return 1
 	fi
+	coverage_collect_exposure_candidates "$exposures" "$candidates"
 	coverage_progress_write finalizing 0 0 running generating_policy
 	awk -F '\t' '!seen[$1 FS $2]++' "$candidates" > "$unique"
 	missing_total=$(( $(coverage_missing_count "$PERSISTENT_DIR/sus_maps.txt") + $(coverage_missing_count "$PERSISTENT_DIR/sus_paths.txt") + $(coverage_missing_count "$PERSISTENT_DIR/sus_paths_loop.txt") ))
@@ -375,7 +403,7 @@ coverage_scan() {
 		coverage_put schedule.sus_paths "$(coverage_schedule_status "$PERSISTENT_DIR/scripts_postfs.txt" SusAF_apply-sus-paths.sh)"
 		coverage_put schedule.sus_paths_loop "$(coverage_schedule_status "$PERSISTENT_DIR/scripts_postfs.txt" SusAF_apply-sus-paths-loop.sh)"
 		coverage_put candidate.count "$candidate_count"; coverage_put candidate.safe "$low_count"; coverage_put candidate.risky "$risky_count"
-		coverage_put candidate.sus_maps "$map_count"; coverage_put candidate.sus_paths_loop "$path_count"; coverage_put candidate.kernel_umount "$mount_count"; coverage_put candidate.spoof "$spoof_count"
+		coverage_put candidate.sus_maps "$map_count"; coverage_put candidate.sus_paths_loop "$path_count"; coverage_put candidate.sus_paths "$(awk -F '\t' '$1 == "sus_path" { n++ } END { print n+0 }' "$unique")"; coverage_put candidate.kernel_umount "$mount_count"; coverage_put candidate.spoof "$spoof_count"
 		index=0
 		while IFS="$(printf '\t')" read -r kind target reason risk action scope || [ -n "$kind$target$reason$risk$action$scope" ]; do
 			[ -n "$kind" ] && [ -n "$target" ] || continue; index=$((index + 1))
