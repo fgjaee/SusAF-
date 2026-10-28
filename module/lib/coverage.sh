@@ -594,7 +594,7 @@ coverage_apply_safe() {
 }
 
 coverage_verify() {
-	local state_dir="$PERSISTENT_DIR/state" report temp missing mount_failures remaining kernel_mode feature_result mount_result runtime_available=1 result=clean exit_result=0
+	local state_dir="$PERSISTENT_DIR/state" report temp missing mount_failures remaining kernel_mode feature_result mount_result runtime_available=1 result=clean exit_result=0 app_visibility visible_count
 	report="$state_dir/coverage.verify.txt"; temp="${report}.tmp.$$"; coverage_scan '' verify >/dev/null || return 1
 	missing=$(coverage_property "$state_dir/coverage.report.txt" missing.total 0)
 	mount_failures=$(coverage_property "$state_dir/kernel_umount.report.txt" failed 0)
@@ -602,19 +602,22 @@ coverage_verify() {
 	kernel_mode=$(coverage_conf KERNEL_UMOUNT_MODE enabled)
 	feature_result=$(coverage_property "$state_dir/kernel_umount.feature.txt" result not-recorded)
 	mount_result=$(coverage_property "$state_dir/kernel_umount.report.txt" result not-recorded)
+	app_visibility=$(coverage_property "$state_dir/coverage.report.txt" exposure.app_visibility not-tested)
+	visible_count=$(coverage_property "$state_dir/coverage.report.txt" exposure.visible_count 0)
 	case "$missing" in ''|*[!0-9]*) missing=0 ;; esac
 	case "$mount_failures" in ''|*[!0-9]*) mount_failures=0 ;; esac
 	case "$remaining" in ''|*[!0-9]*) remaining=0 ;; esac
 	if [ "$kernel_mode" = enabled ] && { [ "$feature_result" != ok ] || [ "$mount_result" != ok ]; }; then
 		runtime_available=0
 	fi
-	if [ "$runtime_available" -ne 1 ] || [ "$mount_failures" -gt 0 ] || [ "$remaining" -gt 0 ]; then
+	case "$visible_count" in ''|*[!0-9]*) visible_count=0 ;; esac
+	if [ "$runtime_available" -ne 1 ] || [ "$mount_failures" -gt 0 ] || [ "$remaining" -gt 0 ] || [ "$visible_count" -gt 0 ]; then
 		result=attention
 		exit_result=1
 	elif [ "$missing" -gt 0 ]; then
 		result=clean-with-stale
 	fi
-	{ coverage_put schema 1; coverage_put generated.at "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; coverage_put missing.configured "$missing"; coverage_put mount.failures "$mount_failures"; coverage_put remaining.candidates "$remaining"; coverage_put kernel_umount.mode "$kernel_mode"; coverage_put kernel_umount.feature_result "$feature_result"; coverage_put kernel_umount.mount_result "$mount_result"; coverage_put runtime.available "$runtime_available"; coverage_put result "$result"; coverage_put verification.scope configured_rules_and_kernel_umount; coverage_put app_visibility not-tested; coverage_put observations.count "$(coverage_property "$state_dir/coverage.report.txt" exposure.count 0)"; coverage_put observations.status "$(coverage_property "$state_dir/coverage.report.txt" exposure.result unavailable)"; coverage_put note app_restart_or_reboot_required_for_namespace_verification; } > "$temp" || return 1
+	{ coverage_put schema 1; coverage_put generated.at "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; coverage_put missing.configured "$missing"; coverage_put mount.failures "$mount_failures"; coverage_put remaining.candidates "$remaining"; coverage_put kernel_umount.mode "$kernel_mode"; coverage_put kernel_umount.feature_result "$feature_result"; coverage_put kernel_umount.mount_result "$mount_result"; coverage_put runtime.available "$runtime_available"; coverage_put result "$result"; coverage_put verification.scope configured_rules_and_kernel_umount; coverage_put app_visibility "$app_visibility"; coverage_put observations.visible "$visible_count"; coverage_put observations.count "$(coverage_property "$state_dir/coverage.report.txt" exposure.count 0)"; coverage_put observations.status "$(coverage_property "$state_dir/coverage.report.txt" exposure.result unavailable)"; coverage_put note app_restart_or_reboot_required_for_namespace_verification; } > "$temp" || return 1
 	chmod 600 "$temp" 2>/dev/null; mv "$temp" "$report"
 	coverage_progress_write complete 1 1 "$([ "$exit_result" -eq 0 ] && printf complete || printf attention)" "verification_$result"
 	cat "$report"
