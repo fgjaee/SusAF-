@@ -321,14 +321,14 @@ coverage_collect_controls() {
 }
 
 coverage_scan() {
-	local package="${1:-}" operation="${2:-audit}" state_dir="$PERSISTENT_DIR/state" output temp candidates unique kernel_report feature_report
+	local package="${1:-}" operation="${2:-audit}" state_dir="$PERSISTENT_DIR/state" output temp candidates unique exposures kernel_report feature_report
 	local kind target reason risk action scope index candidate_count map_count path_count mount_count spoof_count low_count risky_count missing_total
-	output="${SUSAF_COVERAGE_REPORT:-$state_dir/coverage.report.txt}"; temp="${output}.tmp.$$"; candidates="${output}.candidates.$$"; unique="${output}.unique.$$"; kernel_report="$state_dir/kernel_umount.report.txt"; feature_report="$state_dir/kernel_umount.feature.txt"
+	output="${SUSAF_COVERAGE_REPORT:-$state_dir/coverage.report.txt}"; temp="${output}.tmp.$$"; candidates="${output}.candidates.$$"; unique="${output}.unique.$"; exposures="${output}.exposures.$"; kernel_report="$state_dir/kernel_umount.report.txt"; feature_report="$state_dir/kernel_umount.feature.txt"
 	if [ -n "$package" ] && ! coverage_package_is_safe "$package"; then echo "[x] invalid package name: $package"; return 1; fi
 	COVERAGE_OPERATION="$operation"
 	coverage_progress_write preparing 0 0 running preparing_audit
 	umask 077; mkdir -p "$state_dir" || return 1; chmod 700 "$PERSISTENT_DIR" "$state_dir" 2>/dev/null
-	trap "rm -f '$temp' '$candidates' '$unique' '${candidates}.'*" EXIT HUP INT TERM
+	trap "rm -f '$temp' '$candidates' '$unique' '$exposures' '${candidates}.'*" EXIT HUP INT TERM
 	: > "$candidates"
 	coverage_progress_write artifacts 0 0 running checking_device_artifacts
 	coverage_collect_curated_paths "$candidates"
@@ -336,6 +336,12 @@ coverage_scan() {
 	coverage_collect_mount_namespaces "$package" "$candidates"
 	coverage_progress_write controls 0 0 running checking_supported_controls
 	coverage_collect_controls "$candidates"
+	coverage_progress_write exposure 0 0 running collecting_read_only_evidence
+	if command -v exposure_scan >/dev/null 2>&1; then
+		exposure_scan "$exposures" || return 1
+	else
+		: > "$exposures" || return 1
+	fi
 	coverage_progress_write finalizing 0 0 running generating_policy
 	awk -F '\t' '!seen[$1 FS $2]++' "$candidates" > "$unique"
 	missing_total=$(( $(coverage_missing_count "$PERSISTENT_DIR/sus_maps.txt") + $(coverage_missing_count "$PERSISTENT_DIR/sus_paths.txt") + $(coverage_missing_count "$PERSISTENT_DIR/sus_paths_loop.txt") ))
@@ -374,11 +380,21 @@ coverage_scan() {
 		done < "$unique"
 		coverage_put verification.last "$(coverage_property "$state_dir/coverage.verify.txt" result not-run)"
 		coverage_put rollback.available "$([ -f "$state_dir/coverage.last_checkpoint" ] && printf 1 || printf 0)"
+		coverage_put audit.completed 1
+		coverage_put audit.app_visibility not-tested
+		if command -v exposure_emit_report >/dev/null 2>&1; then
+			exposure_emit_report "$exposures"
+		else
+			coverage_put exposure.schema 1
+			coverage_put exposure.count 0
+			coverage_put exposure.result unavailable
+			coverage_put exposure.app_visibility not-tested
+		fi
 		coverage_put limitation.tee_integrity outside_susaf; coverage_put limitation.anonymous_maps requires_injection_backend; coverage_put result ok
 	} > "$temp" || return 1
 	chmod 600 "$temp" 2>/dev/null; mv "$temp" "$output" || return 1
 	trap - EXIT HUP INT TERM
-	rm -f "$candidates" "$unique" "${candidates}."*
+	rm -f "$candidates" "$unique" "$exposures" "${candidates}."*
 	if [ "$operation" = verify ]; then
 		coverage_progress_write evaluating 0 0 running evaluating_policy
 	else
@@ -531,7 +547,7 @@ coverage_verify() {
 	elif [ "$missing" -gt 0 ]; then
 		result=clean-with-stale
 	fi
-	{ coverage_put schema 1; coverage_put generated.at "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; coverage_put missing.configured "$missing"; coverage_put mount.failures "$mount_failures"; coverage_put remaining.candidates "$remaining"; coverage_put kernel_umount.mode "$kernel_mode"; coverage_put kernel_umount.feature_result "$feature_result"; coverage_put kernel_umount.mount_result "$mount_result"; coverage_put runtime.available "$runtime_available"; coverage_put result "$result"; coverage_put note app_restart_or_reboot_required_for_namespace_verification; } > "$temp" || return 1
+	{ coverage_put schema 1; coverage_put generated.at "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; coverage_put missing.configured "$missing"; coverage_put mount.failures "$mount_failures"; coverage_put remaining.candidates "$remaining"; coverage_put kernel_umount.mode "$kernel_mode"; coverage_put kernel_umount.feature_result "$feature_result"; coverage_put kernel_umount.mount_result "$mount_result"; coverage_put runtime.available "$runtime_available"; coverage_put result "$result"; coverage_put verification.scope configured_rules_and_kernel_umount; coverage_put app_visibility not-tested; coverage_put note app_restart_or_reboot_required_for_namespace_verification; } > "$temp" || return 1
 	chmod 600 "$temp" 2>/dev/null; mv "$temp" "$report"
 	coverage_progress_write complete 1 1 "$([ "$exit_result" -eq 0 ] && printf complete || printf attention)" "verification_$result"
 	cat "$report"
