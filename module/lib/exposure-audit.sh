@@ -84,6 +84,11 @@ exposure_scan() {
                 EXPOSURE_TRUNCATED=1
             fi
         fi
+    elif [ "$apex_su" = /apex/com.android.virt/bin/su ] &&
+         [ -d /apex ] && [ -x /apex ]; then
+        # The optional virtual APEX is absent on many devices. Its absence
+        # is evidence of no such root-side path, not a scan failure.
+        EXPOSURE_APEX_CHECK=absent
     else
         EXPOSURE_APEX_CHECK=unavailable
     fi
@@ -101,7 +106,7 @@ exposure_emit_report() {
     coverage_put exposure.app_visibility not-tested
     coverage_put exposure.verification_method none
     coverage_put exposure.policy_action none
-    if [ "$EXPOSURE_TMP_CHECK" != checked ] || [ "$EXPOSURE_APEX_CHECK" != checked ] || [ "$EXPOSURE_TRUNCATED" = 1 ]; then
+    if [ "$EXPOSURE_TMP_CHECK" != checked ] || { [ "$EXPOSURE_APEX_CHECK" != checked ] && [ "$EXPOSURE_APEX_CHECK" != absent ]; } || [ "$EXPOSURE_TRUNCATED" = 1 ]; then
         coverage_put exposure.result incomplete
     elif [ "$count" -gt 0 ]; then
         coverage_put exposure.result observed-unverified
