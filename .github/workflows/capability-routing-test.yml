@@ -19,7 +19,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,6 +48,20 @@ jobs:
         working-directory: webui
         run: pnpm build
 
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build ordinary-app visibility probe
+        run: |
+          set -eu
+          mkdir -p dist module/probe
+          bash probe-app/build.sh dist
+          cp dist/SusAF-Visibility-Probe.apk module/probe/SusAF-Visibility-Probe.apk
+
       - name: Package installable test module
         run: |
           set -eu
@@ -59,6 +73,7 @@ jobs:
           unzip -p dist/SusAF-capability-routing.zip module.prop | grep -Fqx 'id=susaf'
           unzip -Z1 dist/SusAF-capability-routing.zip | grep -Fqx 'webroot/index.html'
           unzip -Z1 dist/SusAF-capability-routing.zip | grep -Fqx 'lib/susfs-capabilities.sh'
+          unzip -Z1 dist/SusAF-capability-routing.zip | grep -Fqx 'probe/SusAF-Visibility-Probe.apk'
           sha256sum dist/SusAF-capability-routing.zip > dist/SHA256SUMS
 
       - name: Upload test module
@@ -68,4 +83,5 @@ jobs:
           if-no-files-found: error
           path: |
             dist/SusAF-capability-routing.zip
+            dist/SusAF-Visibility-Probe.apk
             dist/SHA256SUMS
