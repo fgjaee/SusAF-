@@ -194,6 +194,9 @@ result=ok
 EOF
 verify_output=$(coverage_verify)
 printf '%s\n' "$verify_output" | grep -Fqx 'result=clean-with-stale'
+printf '%s\n' "$verify_output" | grep -Fqx 'app_visibility=not-tested'
+printf '%s\n' "$verify_output" | grep -Fqx 'verification.scope=configured_rules_and_kernel_umount'
+printf '%s\n' "$verify_output" | grep -Fqx 'observations.count=2'
 printf '%s\n' "$verify_output" | grep -Fqx 'missing.configured=1'
 printf '%s\n' "$verify_output" | grep -Fqx 'remaining.candidates=0'
 grep -Fqx 'operation=verify' "$STATE_DIR/coverage.progress.txt"
