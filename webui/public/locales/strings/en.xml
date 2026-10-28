@@ -331,6 +331,10 @@
     <string name="coverage_verify_clean_with_stale">Policy checks passed · inactive rules retained · app visibility unverified</string>
     <string name="coverage_verify_attention">Verification needs attention</string>
     <string name="coverage_verify_detail">%1$s inactive configured rule(s) · %2$s mount failure(s) · %3$s remaining correction(s)</string>
+    <string name="coverage_verify_policy_app_checked">Policy checks passed · independent app visibility checked</string>
+    <string name="coverage_verify_app_visible">%s observed runtime artifact(s) remain visible to the verifier app</string>
+    <string name="coverage_verify_app_checked">Independent app checks complete; none of the observed artifacts are visible</string>
+    <string name="coverage_verify_app_partial">Independent app visibility was only partially checked</string>
     <string name="coverage_verify_app_not_tested">Ordinary-app visibility has not been tested</string>
     <string name="coverage_verify_runtime_unavailable">Kernel verification incomplete · feature: %1$s · mount policy: %2$s</string>
     <string name="coverage_verify_attention_detail">Verification found active issues. The exact counts are shown below.</string>
