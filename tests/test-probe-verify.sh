@@ -97,4 +97,14 @@ probe_verify_file "$f"
 [ "$PROBE_STATUS" = call-failed ]
 grep -Fq "$(printf '\t')NOT_TESTED$(printf '\t')0" "$f"
 
+# An inconclusive syscall is NOT proof the app cannot see an artifact.
+unset SUSAF_FAKE_PROBE_UID
+printf '/data/local/tmp/unknown_root\tfile\ttemp-root\tnot-listed\tloop\n' > "$f"
+probe_verify_file "$f"
+[ "$PROBE_STATUS" = ready ]
+out=$(exposure_emit_report "$f")
+printf '%s\n' "$out" | grep -Fqx 'exposure.app_visibility=partial'
+printf '%s\n' "$out" | grep -Fqx 'exposure.result=observed-unverified'
+printf '%s\n' "$out" | grep -Fqx 'exposure.1.app_visibility=error'
+
 echo 'app-process visibility verifier tests passed'
