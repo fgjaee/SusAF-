@@ -104,8 +104,10 @@ exposure_emit_report() {
     errors=$(awk -F '\t' '$6=="ERROR" || $6=="INVALID" { n++ } END { print n+0 }' "$file")
     checked=$((visible + missing + denied + errors))
     if [ "$checked" -gt 0 ]; then
-        if [ "$checked" -eq "$count" ]; then verification=checked
-        else verification=partial
+        if [ "$checked" -eq "$count" ] && [ "$errors" -eq 0 ]; then
+            verification=checked
+        else
+            verification=partial
         fi
     fi
     coverage_put exposure.schema 2
