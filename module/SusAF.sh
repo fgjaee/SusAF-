@@ -15,6 +15,7 @@ select_susfs_binary "$SUSFS_MIN_VERSION" || true
 . "$MODDIR/lib/backup-restore.sh"
 . "$MODDIR/lib/coverage.sh"
 . "$MODDIR/lib/exposure-audit.sh"
+. "$MODDIR/lib/probe-verify.sh"
 . "$MODDIR/lib/config-control.sh"
 
 versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
