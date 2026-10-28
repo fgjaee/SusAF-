@@ -385,7 +385,12 @@ function renderCoverageVerification(values) {
     panel.className = 'coverage-verification';
     if (result === 'attention') panel.classList.add('attention');
     if (result === 'clean-with-stale') panel.classList.add('stale');
-    document.getElementById('coverage-verification-title').textContent = getString(`coverage_verify_${result.replaceAll('-', '_')}`);
+    const appVisibility = values.app_visibility || 'not-tested';
+    const visibleCount = Number.parseInt(values['observations.visible'] || '0', 10) || 0;
+    const cleanWithAppCheck = result === 'clean' && appVisibility === 'checked';
+    document.getElementById('coverage-verification-title').textContent = cleanWithAppCheck
+        ? getString('coverage_verify_policy_app_checked')
+        : getString(`coverage_verify_${result.replaceAll('-', '_')}`);
     document.getElementById('coverage-verification-detail').textContent = getString(
         'coverage_verify_detail',
         stale,
@@ -399,7 +404,11 @@ function renderCoverageVerification(values) {
     const runtimeMessage = values['runtime.available'] === '0'
         ? getString('coverage_verify_runtime_unavailable', featureResult, mountResult)
         : '';
-    runtime.textContent = [runtimeMessage, getString('coverage_verify_app_not_tested')].filter(Boolean).join(' · ');
+    let appMessage = getString('coverage_verify_app_not_tested');
+    if (visibleCount > 0) appMessage = getString('coverage_verify_app_visible', String(visibleCount));
+    else if (appVisibility === 'checked') appMessage = getString('coverage_verify_app_checked');
+    else if (appVisibility === 'partial') appMessage = getString('coverage_verify_app_partial');
+    runtime.textContent = [runtimeMessage, appMessage].filter(Boolean).join(' · ');
     panel.hidden = false;
 }
 
