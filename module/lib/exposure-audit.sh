@@ -63,7 +63,7 @@ exposure_scan() {
             [ -e "$entry" ] || [ -L "$entry" ] || continue
             name=${entry##*/}
             case "$name" in
-                *su*|*SU*|*Su*|*ksu*|*KSU*|*root*|*Root*|*magisk*|*Magisk*|*zygisk*|*Zygisk*|*ghostlock*|*GhostLock*|*.sock)
+                su|su.*|*.su|*su.sock|ksud|ksud.*|*ksu*|*KSU*|*root*|*Root*|*magisk*|*Magisk*|*zygisk*|*Zygisk*|*ghostlock*|*GhostLock*|*bakasu*|*resukisu*|*.sock)
                     [ "$count" -lt "$max" ] || { EXPOSURE_TRUNCATED=1; break; }
                     exposure_record "$output" "$entry" temp-root "$backend" || return 1
                     count=$((count + 1))
