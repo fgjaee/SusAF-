@@ -441,6 +441,52 @@ function selectedCoverageIds() {
         .filter(id => /^\d+$/.test(id));
 }
 
+function renderExposureEvidence(values) {
+    const section = document.getElementById('coverage-evidence');
+    if (!section) return;
+    if (values['exposure.schema'] !== '1') {
+        section.hidden = true;
+        return;
+    }
+    section.hidden = false;
+    const count = Math.min(128, Math.max(0, Number.parseInt(values['exposure.count'] || '0', 10) || 0));
+    const list = document.getElementById('coverage-evidence-list');
+    const empty = document.getElementById('coverage-evidence-empty');
+    const status = document.getElementById('coverage-evidence-status');
+    list.replaceChildren();
+
+    const result = values['exposure.result'] || 'unavailable';
+    const key = 'coverage_evidence_result_' + result.replaceAll('-', '_');
+    const label = getString(key);
+    status.textContent = getString('coverage_evidence_count', String(count)) +
+        ' · ' + (label === key ? result : label);
+    const countText = values['exposure.truncated'] === '1'
+        ? getString('coverage_evidence_truncated') : '';
+    if (countText) status.textContent += ' · ' + countText;
+
+    for (let i = 1; i <= count; i++) {
+        const path = values[`exposure.${i}.path`];
+        if (!path) continue;
+        const item = document.createElement('div');
+        item.className = 'coverage-evidence-entry';
+        const name = document.createElement('code');
+        name.textContent = path;
+        const metadata = document.createElement('small');
+        metadata.textContent = getString(
+            'coverage_evidence_metadata',
+            values[`exposure.${i}.type`] || 'unknown',
+            values[`exposure.${i}.scope`] || 'device',
+            values[`exposure.${i}.configured`] || 'not-checked',
+            values[`exposure.${i}.backend_supported`] || 'not-checked'
+        );
+        const verification = document.createElement('small');
+        verification.textContent = getString('coverage_evidence_unverified');
+        item.append(name, metadata, verification);
+        list.appendChild(item);
+    }
+    empty.hidden = list.childElementCount > 0;
+}
+
 function renderCoverage(values) {
     if (values.schema !== '2') throw new Error('unsupported coverage schema');
     currentCoverage = values;
@@ -463,6 +509,7 @@ function renderCoverage(values) {
     document.getElementById('coverage-mount-candidates').textContent = values['candidate.kernel_umount'] || '0';
     document.getElementById('coverage-spoof-candidates').textContent = values['candidate.spoof'] || '0';
     document.getElementById('coverage-rollback').disabled = values['rollback.available'] !== '1';
+    renderExposureEvidence(values);
 
     const container = document.getElementById('coverage-candidates');
     const empty = document.getElementById('coverage-empty');
