@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.fgjaee.susaf.probe">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
+    <application android:label="SusAF Visibility Probe"
+        android:allowBackup="false"
+        android:debuggable="false"
+        android:usesCleartextTraffic="false"
+        android:hasCode="true">
+        <!-- Every call is explicitly restricted in Java to shell/root UIDs.
+             The verifier itself runs as a normal unprivileged app. -->
+        <provider
+            android:name=".ProbeProvider"
+            android:authorities="com.fgjaee.susaf.probe"
+            android:exported="true"
+            android:grantUriPermissions="false"/>
+    </application>
+</manifest>
