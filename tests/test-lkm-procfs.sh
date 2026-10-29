@@ -12,7 +12,7 @@ export SUSFS_BIN
 susfs_lkm_active() { return 0; }
 susfs_lkm_node() {
     case "$1" in
-        add_sus_path) printf '%s/path\n' "$TEST_ROOT" ;;
+        add_sus_path|add_sus_path_loop) printf '%s/path\n' "$TEST_ROOT" ;;
         add_sus_kstat|add_sus_kstat_statically|update_sus_kstat) printf '%s/kstat\n' "$TEST_ROOT" ;;
         add_open_redirect) printf '%s/redirect\n' "$TEST_ROOT" ;;
         enable_log) printf '%s/log\n' "$TEST_ROOT" ;;
