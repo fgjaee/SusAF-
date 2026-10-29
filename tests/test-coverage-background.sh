@@ -45,6 +45,12 @@ chmod 755 "$MODULE_DIR/SusAF.sh"
 
 . "$ROOT/module/lib/coverage.sh"
 
+# Test the real notification helper directly; the fake worker below intentionally
+# bypasses production SusAF.sh so background lifecycle testing stays isolated.
+coverage_notify_audit complete
+grep -Fq 'notification post -t SusAF susaf-audit Audit complete' "$PERSISTENT_DIR/state/notifications.log"
+rm -f "$PERSISTENT_DIR/state/notifications.log"
+
 started=$(coverage_scan_background)
 printf '%s\n' "$started" | grep -Fqx 'status=started'
 printf '%s\n' "$started" | grep -Eq '^pid=[0-9]+$'
@@ -62,7 +68,6 @@ status=$(coverage_scan_background_status)
 printf '%s\n' "$status" | grep -Fqx 'status=idle'
 grep -Fqx 'status=complete' "$PERSISTENT_DIR/state/coverage.progress.txt"
 grep -Fqx 'schema=2' "$PERSISTENT_DIR/state/coverage.report.txt"
-grep -Fq 'notification post -t SusAF susaf-audit Audit complete' "$PERSISTENT_DIR/state/notifications.log"
 
 if coverage_scan_background 'bad;package' >/dev/null 2>&1; then
     echo 'unsafe background package accepted' >&2
