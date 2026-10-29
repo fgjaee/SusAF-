@@ -194,13 +194,22 @@ append_to_default() {
 	echo "[>] appended $src -> $default"
 }
 
-apply_sus_paths() { [ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_paths.txt" "$1" || return 1; }; apply_list "$PERSISTENT_DIR/sus_paths.txt" add_sus_path 1; }
-apply_sus_paths_loop() { [ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_paths_loop.txt" "$1" || return 1; }; apply_list "$PERSISTENT_DIR/sus_paths_loop.txt" add_sus_path_loop 0; }
+apply_sus_paths() {
+	[ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_paths.txt" "$1" || return 1; }
+	susfs_ensure_backend || return 1
+	apply_list "$PERSISTENT_DIR/sus_paths.txt" add_sus_path 1
+}
+apply_sus_paths_loop() {
+	[ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_paths_loop.txt" "$1" || return 1; }
+	susfs_ensure_backend || return 1
+	apply_list "$PERSISTENT_DIR/sus_paths_loop.txt" add_sus_path_loop 0
+}
 apply_sus_paths_loop_direct() {
 	file="$1"
 	[ -n "$file" ] || { echo "[x] no sus path loop file specified"; return 1; }
 	[ -f "$file" ] && [ ! -L "$file" ] || { echo "[x] invalid sus path loop file: $file"; return 1; }
 	[ -r "$file" ] || { echo "[x] sus path loop file not readable: $file"; return 1; }
+	susfs_ensure_backend || return 1
 	apply_list "$file" add_sus_path_loop 0
 }
 apply_sus_maps() { [ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_maps.txt" "$1" || return 1; }; apply_list "$PERSISTENT_DIR/sus_maps.txt" add_sus_map 1; }
@@ -384,6 +393,7 @@ apply_toggles() {
 
 stage_early() {
 	echo "[+] stage: early (post-fs-data)"
+	susfs_ensure_backend || echo "[!] SUSFS backend unavailable during early stage"
 	apply_kernel_umount_feature
 	coverage_apply_persistent_features || true
 	apply_kstat_add
@@ -395,6 +405,7 @@ stage_early() {
 
 stage_late() {
 	echo "[+] stage: late (boot-completed)"
+	susfs_ensure_backend || echo "[!] SUSFS backend unavailable during late stage"
 	apply_kernel_umount_feature
 	apply_kernel_umount_mounts
 	susfs_prepare_path_roots || true

@@ -6,7 +6,7 @@
 # module version: ask the installed ksu_susfs helper and enabled kernel
 # features, then expose a stable interface to the rest of Sus'AF.
 
-# LKM procfs transport (inforcqb susfs4ksu-lkm v2.3.0-r18.4).
+# LKM procfs transport (inforcqb susfs4ksu-lkm v2.3.x guard).
 # Do not equate an installed .ko with an initialized interface.
 susfs_lkm_active() {
     [ -r /proc/susfs_path ] && [ -r /proc/susfs_kstat ] &&
@@ -14,7 +14,7 @@ susfs_lkm_active() {
 }
 susfs_lkm_node() {
     case "$1" in
-        add_sus_path) echo /proc/susfs_path ;;
+        add_sus_path|add_sus_path_loop) echo /proc/susfs_path ;;
         add_sus_kstat|add_sus_kstat_statically|update_sus_kstat) echo /proc/susfs_kstat ;;
         add_open_redirect) echo /proc/susfs_open_redirect ;;
         enable_log) echo /proc/susfs_enable_log ;;
@@ -31,10 +31,10 @@ susfs_lkm_write() {
             [ "$#" -eq 1 ] || return 2
             case "$1" in 0|1) ;; *) return 2 ;; esac
             printf '%s\n' "$1" > "$node" ;;
-        add_sus_path|add_sus_kstat|update_sus_kstat)
+        add_sus_path|add_sus_path_loop|add_sus_kstat|update_sus_kstat)
             [ "$#" -eq 1 ] || return 2
             case "$cmd" in
-                add_sus_path) printf 'add %s\n' "$1" > "$node" ;;
+                add_sus_path|add_sus_path_loop) printf 'add %s\n' "$1" > "$node" ;;
                 *) printf '%s %s\n' "$cmd" "$1" > "$node" ;;
             esac ;;
         add_sus_kstat_statically)
@@ -46,6 +46,48 @@ susfs_lkm_write() {
             printf '%s %s\n' "$cmd" "$*" > "$node" ;;
         *) return 2 ;;
     esac
+}
+
+susfs_guard_loader_dir() {
+    printf '%s\n' "${SUSAF_SUSFS_LKM_LOADER:-/data/adb/modules/susfs_lkm_loader}"
+}
+
+susfs_ensure_backend() {
+    if susfs_lkm_active; then
+        return 0
+    fi
+    loader=$(susfs_guard_loader_dir)
+    probe="$loader/bin/susfs_probe"
+    if [ -x "$probe" ]; then
+        if "$probe" >/dev/null 2>&1; then probe_rc=0; else probe_rc=$?; fi
+        case "$probe_rc" in
+            0) echo "[*] existing SUSFS interface detected; guard load not required"; return 0 ;;
+            10) ;;
+            *) echo "[x] SUSFS absence could not be established safely (probe=$probe_rc)"; return 1 ;;
+        esac
+    else
+        if [ -x "$SUSFS_BIN" ] &&
+            { [ -n "$(susfs_help)" ] || [ -n "$(susfs_version_value)" ]; }; then
+            return 0
+        fi
+    fi
+    [ -f "$loader/post-fs-data.sh" ] || { echo "[!] SUSFS guard loader is not installed: $loader"; return 1; }
+    if [ -e "$loader/disable" ] || [ -e "$loader/remove" ]; then
+        echo "[!] SUSFS guard loader is disabled or marked for removal"
+        return 1
+    fi
+    echo "[>] loading SUSFS guard through packaged KMI loader"
+    if sh "$loader/post-fs-data.sh"; then load_rc=0; else load_rc=$?; fi
+    if [ "$load_rc" -ne 0 ]; then
+        echo "[x] SUSFS guard loader failed: $load_rc"
+        [ -f "$loader/load.log" ] && tail -40 "$loader/load.log"
+        return "$load_rc"
+    fi
+    if susfs_lkm_active; then echo "[+] SUSFS proc backend ready"; return 0; fi
+    if [ -x "$probe" ] && "$probe" >/dev/null 2>&1; then echo "[+] SUSFS interface ready"; return 0; fi
+    echo "[x] loader returned success but no usable SUSFS interface appeared"
+    [ -f "$loader/load.log" ] && tail -40 "$loader/load.log"
+    return 1
 }
 
 SUSFS_FEATURES_READY=0
@@ -105,7 +147,7 @@ susfs_has_command() {
 	command_name="$1"
 	if susfs_lkm_active; then
 		case "$command_name" in
-			add_sus_path|add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|enable_log|enable_avc_log_spoofing)
+			add_sus_path|add_sus_path_loop|add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|enable_log|enable_avc_log_spoofing)
 				[ -w "$(susfs_lkm_node "$command_name")" ]
 				return $?
 				;;
@@ -223,7 +265,7 @@ susfs() {
 	cmd="$1"
 	if susfs_lkm_active; then
 		case "$cmd" in
-			add_sus_path|add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|enable_log|enable_avc_log_spoofing)
+			add_sus_path|add_sus_path_loop|add_sus_kstat|add_sus_kstat_statically|update_sus_kstat|add_open_redirect|enable_log|enable_avc_log_spoofing)
 				susfs_lkm_write "$@"
 				return $? ;;
 		esac
@@ -523,7 +565,7 @@ show_capabilities() {
 		for node in path kstat open_redirect hide_mounts hide_modules enable_log avc_spoof opath; do
 			[ -e "/proc/susfs_$node" ] && printf "LKM_NODE=%s\n" "$node"
 		done
-		for cmd in add_sus_path add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect enable_log enable_avc_log_spoofing; do
+		for cmd in add_sus_path add_sus_path_loop add_sus_kstat add_sus_kstat_statically update_sus_kstat add_open_redirect enable_log enable_avc_log_spoofing; do
 			emit_susfs_command_capability "$cmd"
 		done
 		printf 'MOUNT_FILTER_BACKEND=%s\n' "$(susfs_mount_filter_backend)"

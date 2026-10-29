@@ -108,3 +108,9 @@ printf '%s\n' "$out" | grep -Fqx 'exposure.result=observed-unverified'
 printf '%s\n' "$out" | grep -Fqx 'exposure.1.app_visibility=error'
 
 echo 'app-process visibility verifier tests passed'
+
+parsed=$(probe_parse_reply 'Result: Bundle[{result=SUSAFPROBEV1__10739__6__MISSING,MISSING,DENIED,VISIBLE,ERROR,INVALID}]')
+[ "$parsed" = '10739|6|MISSING,MISSING,DENIED,VISIBLE,ERROR,INVALID' ] || {
+    echo "Bundle parser failed: $parsed" >&2
+    exit 1
+}

@@ -141,6 +141,37 @@ diagnostics_pidof() {
 	printf '%s\n' "$value"
 }
 
+diagnostics_ksu_default_umount() {
+	file="${SUSAF_KSU_ALLOWLIST:-/data/adb/ksu/.allowlist}"
+	[ -r "$file" ] || { printf 'unavailable\n'; return 0; }
+	magic=$(od -An -tx1 -N4 "$file" 2>/dev/null | tr -d ' \n')
+	version=$(od -An -tu4 -N4 -j4 "$file" 2>/dev/null | tr -d '[:space:]')
+	[ "$magic" = "55534b7f" ] && [ "$version" = "4" ] || { printf 'unknown\n'; return 0; }
+	size=$(wc -c < "$file" 2>/dev/null | tr -d '[:space:]')
+	case "$size" in ''|*[!0-9]*) printf 'unknown\n'; return 0 ;; esac
+	[ "$size" -ge 8 ] || { printf 'unknown\n'; return 0; }
+	rec=784
+	payload=$((size - 8))
+	[ $((payload % rec)) -eq 0 ] || { printf 'unknown\n'; return 0; }
+	count=$((payload / rec))
+	i=0
+	while [ "$i" -lt "$count" ]; do
+		base=$((8 + i * rec))
+		key=$(dd if="$file" bs=1 skip=$((base + 4)) count=256 2>/dev/null | tr -d '\000')
+		if [ "$key" = '$' ]; then
+			value=$(od -An -tu1 -N1 -j$((base + 273)) "$file" 2>/dev/null | tr -d '[:space:]')
+			case "$value" in
+				1) printf 'enabled\n' ;;
+				0) printf 'disabled\n' ;;
+				*) printf 'unknown\n' ;;
+			esac
+			return 0
+		fi
+		i=$((i + 1))
+	done
+	printf 'not-overridden\n'
+}
+
 generate_diagnostics() {
 	local state_dir="$PERSISTENT_DIR/state"
 	local output="${SUSAF_DIAGNOSTICS_FILE:-$state_dir/diagnostics.properties}"
@@ -344,6 +375,13 @@ generate_diagnostics() {
 		diagnostics_put kernel_umount.rejected "$(diagnostics_property "$mount_report" rejected 0)"
 		diagnostics_put kernel_umount.failures "$mount_failures"
 		diagnostics_put kernel_umount.notify "$(diagnostics_property "$mount_report" notify not-recorded)"
+		default_umount=$(diagnostics_ksu_default_umount)
+		diagnostics_put sus_path.default_umount "$default_umount"
+		if [ "$default_umount" = disabled ]; then
+			diagnostics_put sus_path.policy_warning "default-umount-disabled"
+		else
+			diagnostics_put sus_path.policy_warning none
+		fi
 
 		diagnostics_put targets.sus_paths "$(diagnostics_list_count "$PERSISTENT_DIR/sus_paths.txt")"
 		diagnostics_put targets.sus_paths_malformed "$(diagnostics_invalid_count "$PERSISTENT_DIR/sus_paths.txt" path)"

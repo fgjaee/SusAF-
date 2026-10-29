@@ -5,9 +5,20 @@
 # No probe APK / provider means an explicit NOT_TESTED result.
 
 probe_parse_reply() {
-    printf '%s\n' "$1" |
-        sed -n 's/.*SUSAFPROBEV1__\([0-9][0-9]*\)__\([0-9][0-9]*\)__\([A-Z_,]*\).*/\1|\2|\3/p' |
-        head -n 1
+    local token uid count states
+    case "$1" in
+        *SUSAFPROBEV1__*) token=${1#*SUSAFPROBEV1__} ;;
+        *) return 1 ;;
+    esac
+    uid=${token%%__*}
+    [ "$uid" != "$token" ] || return 1
+    token=${token#*__}
+    count=${token%%__*}
+    [ "$count" != "$token" ] || return 1
+    states=${token#*__}
+    states=${states%%\}*}
+    states=${states%%]*}
+    printf '%s|%s|%s\n' "$uid" "$count" "$states"
 }
 
 probe_check_batch() {

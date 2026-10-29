@@ -196,3 +196,15 @@ For continued development on the reference device:
   Sus'AF so only one controller changes the same kernel state.
 
 See [ROADMAP.md](ROADMAP.md) for the implementation order.
+
+
+## Pixel 10 Pro Fold guard validation (2026-10-29)
+
+Real-device validation on a late-loaded BakaSU UAPI 5 Pixel 10 Pro Fold confirmed the standalone `susfs_guard_lkm` path backend through the packaged KMI-aware loader.
+
+- `susfs_insmod` loaded the Android 15 / 6.6 guard and exposed `/proc/susfs_path`.
+- Root retained access while an ordinary app UID received `ENOENT` / `MISSING`.
+- Six temporary-root artifacts were simultaneously hidden from the companion visibility probe.
+- The SUS_PATH app gate follows KernelSU/BakaSU's unmount policy. A default non-root profile with `umount_modules=0` prevented hiding despite valid rules and hooks; enabling it produced six `MISSING` results without breaking BakaSU.
+- On the procfs guard backend, `add_sus_path_loop` is routed to the guard's native persistent `add` operation.
+- The cold autoload path is synthetic/CI-tested until a future session starts with the guard absent; a working guard must not be unloaded only to test this path.

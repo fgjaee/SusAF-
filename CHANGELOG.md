@@ -1,5 +1,16 @@
 # Sus'AF Changelog
 
+## v0.1.0-dev.13 — 2026-10-29
+
+- Added first-class support for the standalone `susfs_guard_lkm` procfs backend.
+- SusAF can invoke the installed KMI-aware `susfs_lkm_loader` when no SUSFS interface is active.
+- Mapped `add_sus_path_loop` onto the guard's native persistent `/proc/susfs_path` add operation.
+- Replays persistent SUS_PATH rules for late-loaded KernelSU/BakaSU sessions.
+- Reports BakaSU's default non-root `umount_modules` policy when the v4 allowlist format is recognized.
+- Hardened ordinary-app visibility probe parsing for Android `content call` Bundle output.
+- Added guard-loader and procfs compatibility tests.
+
+
 This changelog covers Sus'AF development. Upstream history remains available in
 Git history and the upstream project; it is not repeated here.
 

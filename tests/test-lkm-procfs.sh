@@ -25,6 +25,7 @@ for name in path kstat redirect log avc; do
 done
 
 susfs_has_command add_sus_path
+susfs_has_command add_sus_path_loop
 susfs_has_command add_open_redirect
 if susfs_has_command add_sus_map; then
     echo "unsupported LKM command falsely reported" >&2
@@ -33,6 +34,8 @@ fi
 
 susfs add_sus_path /data/local/tmp/susaf_test
 grep -Fqx 'add /data/local/tmp/susaf_test' "$TEST_ROOT/path"
+susfs add_sus_path_loop /data/local/tmp/susaf_loop_test
+grep -Fqx 'add /data/local/tmp/susaf_loop_test' "$TEST_ROOT/path"
 
 susfs add_sus_kstat /data/local/tmp/susaf_test
 grep -Fqx 'add_sus_kstat /data/local/tmp/susaf_test' "$TEST_ROOT/kstat"
