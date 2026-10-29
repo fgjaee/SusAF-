@@ -366,6 +366,62 @@ async function runCoverageCommand(operation, command) {
     return exec(command);
 }
 
+async function getCoverageBackgroundStatus() {
+    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-scan-background-status`);
+    if (result.errno !== 0 || !result.stdout.trim()) return null;
+    return parseDiagnostics(result.stdout);
+}
+
+async function waitForCoverageBackground(sequence) {
+    while (sequence === coverageRequestSequence) {
+        await pollCoverageProgress();
+        const status = await getCoverageBackgroundStatus();
+        if (!status || status.status !== 'running') {
+            const progressResult = await exec(`cat "${basePath}/state/coverage.progress.txt" 2>/dev/null`);
+            const progress = progressResult.errno === 0 && progressResult.stdout.trim()
+                ? parseDiagnostics(progressResult.stdout) : null;
+            if (progress?.status === 'failed') {
+                throw new Error(progress.detail || 'background coverage scan failed');
+            }
+
+            const report = await exec(`cat "${basePath}/state/coverage.report.txt" 2>/dev/null`);
+            if (report.errno === 0 && report.stdout.trim()) return report.stdout;
+            throw new Error('background coverage scan ended without a report');
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 900));
+    }
+    return null;
+}
+
+async function startCoverageBackground(packageName = '') {
+    const command = `sh "${moduleDirectory}/SusAF.sh" --coverage-scan-background${packageName ? ` "${packageName}"` : ''}`;
+    const result = await exec(command);
+    if (result.errno !== 0) throw new Error(result.stderr || result.stdout || 'could not start background audit');
+    return parseDiagnostics(result.stdout);
+}
+
+async function resumeCoverageBackground() {
+    const status = await getCoverageBackgroundStatus();
+    if (!status || status.status !== 'running') return;
+
+    const sequence = ++coverageRequestSequence;
+    setCoverageBusy(true);
+    beginCoverageOperation('audit');
+    try {
+        const report = await waitForCoverageBackground(sequence);
+        if (sequence !== coverageRequestSequence || !report) return;
+        renderCoverage(parseDiagnostics(report));
+        await finishCoverageOperation('complete');
+    } catch (error) {
+        if (sequence !== coverageRequestSequence) return;
+        if (coverageOperation) await finishCoverageOperation('failed');
+        setCoverageMessage(getString('coverage_scan_failed'), true);
+        console.warn('Background coverage scan failed:', error);
+    } finally {
+        if (sequence === coverageRequestSequence) setCoverageBusy(false);
+    }
+}
+
 function renderCoverageVerification(values) {
     const panel = document.getElementById('coverage-verification');
     if (!values || values.schema !== '1') {
@@ -589,21 +645,27 @@ async function loadCoverage(scan = false, packageName = '') {
     const sequence = ++coverageRequestSequence;
     setCoverageBusy(true);
     setCoverageMessage(scan ? getString('coverage_scanning') : '');
-    const command = scan
-        ? `sh "${moduleDirectory}/SusAF.sh" --coverage-scan${packageName ? ` "${packageName}"` : ''}`
-        : `cat "${basePath}/state/coverage.report.txt"`;
 
     try {
-        const result = scan ? await runCoverageCommand('audit', command) : await exec(command);
-        if (sequence !== coverageRequestSequence) return;
-        if (result.errno !== 0 || !result.stdout.trim()) {
-            if (!scan) {
+        let stdout = '';
+        if (scan) {
+            beginCoverageOperation('audit');
+            await waitForCoveragePaint();
+            await startCoverageBackground(packageName);
+            if (sequence !== coverageRequestSequence) return;
+            stdout = await waitForCoverageBackground(sequence);
+            if (sequence !== coverageRequestSequence || !stdout) return;
+        } else {
+            const result = await exec(`cat "${basePath}/state/coverage.report.txt"`);
+            if (sequence !== coverageRequestSequence) return;
+            if (result.errno !== 0 || !result.stdout.trim()) {
                 setCoverageMessage(getString('coverage_not_scanned'));
                 return;
             }
-            throw new Error(result.stderr || result.stdout || 'coverage scan failed');
+            stdout = result.stdout;
         }
-        renderCoverage(parseDiagnostics(result.stdout));
+
+        renderCoverage(parseDiagnostics(stdout));
         if (scan) {
             await finishCoverageOperation('complete');
             showPrompt(getString('coverage_scan_complete'));
@@ -808,8 +870,11 @@ export function mount() {
 export function onShow() {
     updateUIVisibility();
     loadDiagnostics(false);
-    loadCoverage(false);
-    loadCoverageVerification();
+    void (async () => {
+        await loadCoverage(false);
+        await loadCoverageVerification();
+        await resumeCoverageBackground();
+    })();
 }
 
 export function onHide() {

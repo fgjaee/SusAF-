@@ -38,6 +38,83 @@ coverage_progress_write() {
 	mv "$temp" "$output" 2>/dev/null || rm -f "$temp"
 }
 
+coverage_background_pid_file() {
+	printf '%s\n' "$PERSISTENT_DIR/state/coverage.audit.pid"
+}
+
+coverage_background_package_file() {
+	printf '%s\n' "$PERSISTENT_DIR/state/coverage.audit.package"
+}
+
+coverage_scan_background_status() {
+	local pid_file package_file pid="" package="" status=idle
+	pid_file=$(coverage_background_pid_file)
+	package_file=$(coverage_background_package_file)
+	[ -f "$pid_file" ] && pid=$(sed -n '1p' "$pid_file" 2>/dev/null)
+	[ -f "$package_file" ] && package=$(sed -n '1p' "$package_file" 2>/dev/null)
+	case "$pid" in
+		''|*[!0-9]*) pid="" ;;
+		*) if kill -0 "$pid" 2>/dev/null; then status=running; else pid=""; rm -f "$pid_file" "$package_file"; fi ;;
+	esac
+	coverage_put schema 1
+	coverage_put status "$status"
+	coverage_put pid "${pid:-none}"
+	coverage_put package "${package:-all-running-apps}"
+}
+
+coverage_scan_worker() {
+	local package="${1:-}" rc=0
+	if coverage_scan "$package"; then
+		rc=0
+	else
+		rc=$?
+		COVERAGE_OPERATION=audit
+		coverage_progress_write failed 0 0 failed audit_failed
+	fi
+	rm -f "$(coverage_background_pid_file)" "$(coverage_background_package_file)"
+	return "$rc"
+}
+
+coverage_scan_background() {
+	local package="${1:-}" state_dir="$PERSISTENT_DIR/state" pid_file package_file log pid
+	if [ -n "$package" ] && ! coverage_package_is_safe "$package"; then
+		echo "[x] invalid package name: $package"
+		return 1
+	fi
+	mkdir -p "$state_dir" || return 1
+	pid_file=$(coverage_background_pid_file)
+	package_file=$(coverage_background_package_file)
+	log="$state_dir/coverage.background.log"
+
+	if [ "$(coverage_scan_background_status | sed -n 's/^status=//p')" = running ]; then
+		coverage_scan_background_status
+		return 0
+	fi
+
+	printf '%s\n' "$package" > "$package_file" || return 1
+	chmod 600 "$package_file" 2>/dev/null
+	COVERAGE_OPERATION=audit
+	coverage_progress_write preparing 0 0 running queued_background_audit
+
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+	elif command -v busybox >/dev/null 2>&1; then
+		busybox setsid sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+	elif command -v nohup >/dev/null 2>&1; then
+		nohup sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+	else
+		sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+	fi
+	pid=$!
+	case "$pid" in ''|*[!0-9]*) rm -f "$package_file"; return 1 ;; esac
+	printf '%s\n' "$pid" > "$pid_file" || return 1
+	chmod 600 "$pid_file" "$log" 2>/dev/null
+	coverage_put schema 1
+	coverage_put status started
+	coverage_put pid "$pid"
+	coverage_put package "${package:-all-running-apps}"
+}
+
 coverage_property() {
 	local file="$1" key="$2" fallback="${3:-}" value
 	value=$(awk -F= -v key="$key" '$1 == key { value=substr($0, index($0, "=") + 1) } END { print value }' "$file" 2>/dev/null)

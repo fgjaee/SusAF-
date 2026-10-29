@@ -451,6 +451,8 @@ show_help () {
 	printf " --diagnostics \t\t\trefresh and print the private diagnostics snapshot\n"
 	printf " --status-report \t\t\trefresh diagnostics without editing module.prop\n"
 	printf " --coverage-scan [package] \t\tscan exact hiding coverage without changing config\n"
+	printf " --coverage-scan-background [package] \tstart audit as a detached background job\n"
+	printf " --coverage-scan-background-status \tshow detached audit status\n"
 	printf " --coverage-apply <ids> \t\tcheckpoint and save selected scan candidates\n"
 	printf " --coverage-apply-safe \t\tapply all generated low-risk candidates\n"
 	printf " --coverage-verify \t\t\trescan and verify the generated policy\n"
@@ -494,6 +496,9 @@ case "$1" in
 	--status-report) status_report; exit ;;
 	--diagnostics) show_diagnostics; exit ;;
 	--coverage-scan) coverage_scan "$2"; exit ;;
+	--coverage-scan-background) coverage_scan_background "$2"; exit ;;
+	--coverage-scan-background-status) coverage_scan_background_status; exit ;;
+	--coverage-scan-worker) coverage_scan_worker "$2"; exit ;;
 	--coverage-apply) coverage_apply_ids "$2"; exit ;;
 	--coverage-apply-safe) coverage_apply_safe; exit ;;
 	--coverage-verify) coverage_verify; exit ;;

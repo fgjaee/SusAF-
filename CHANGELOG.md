@@ -1,5 +1,12 @@
 # Sus'AF Changelog
 
+## v0.1.0-dev.14 — 2026-10-29
+
+- Runs full and per-app coverage audits as detached background jobs instead of tying their lifetime to the WebUI exec call.
+- The WebUI continues polling the existing coverage progress file while open and reconnects to an audit that is still running when the page is reopened.
+- Added explicit detached-audit status and worker commands; no reboot is required to start or finish an audit.
+
+
 ## v0.1.0-dev.13 — 2026-10-29
 
 - Added first-class support for the standalone `susfs_guard_lkm` procfs backend.
