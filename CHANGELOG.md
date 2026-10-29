@@ -1,5 +1,12 @@
 # Sus'AF Changelog
 
+## v0.1.0-dev.15 — 2026-10-29
+
+- Posts a best-effort Android notification when a detached audit completes or fails.
+- Audit notifications are independent of the WebUI and do not affect the audit result if the system notification channel is unavailable.
+- Added notification coverage to the detached-audit test.
+
+
 ## v0.1.0-dev.14 — 2026-10-29
 
 - Runs full and per-app coverage audits as detached background jobs instead of tying their lifetime to the WebUI exec call.

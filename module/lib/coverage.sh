@@ -62,14 +62,42 @@ coverage_scan_background_status() {
 	coverage_put package "${package:-all-running-apps}"
 }
 
+coverage_notify_audit() {
+	local outcome="$1" package="${2:-}" cmd_bin title text
+	[ "${SUSAF_AUDIT_NOTIFICATIONS:-1}" = 1 ] || return 0
+	cmd_bin="${SUSAF_NOTIFICATION_CMD:-/system/bin/cmd}"
+	if [ ! -x "$cmd_bin" ]; then
+		cmd_bin=$(command -v cmd 2>/dev/null || true)
+	fi
+	[ -n "$cmd_bin" ] && [ -x "$cmd_bin" ] || return 0
+
+	title="SusAF"
+	case "$outcome" in
+		complete)
+			text="Audit complete"
+			;;
+		failed)
+			text="Audit failed"
+			;;
+		*) return 0 ;;
+	esac
+	[ -z "$package" ] || text="$text: $package"
+
+	# Best-effort only. A blocked notification channel must never change
+	# the audit result or leave the worker marked as running.
+	"$cmd_bin" notification post -t "$title" susaf-audit "$text" >/dev/null 2>&1 || true
+}
+
 coverage_scan_worker() {
 	local package="${1:-}" rc=0
 	if coverage_scan "$package"; then
 		rc=0
+		coverage_notify_audit complete "$package"
 	else
 		rc=$?
 		COVERAGE_OPERATION=audit
 		coverage_progress_write failed 0 0 failed audit_failed
+		coverage_notify_audit failed "$package"
 	fi
 	rm -f "$(coverage_background_pid_file)" "$(coverage_background_package_file)"
 	return "$rc"

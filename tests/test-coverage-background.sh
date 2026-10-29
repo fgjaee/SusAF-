@@ -7,7 +7,15 @@ trap 'rm -rf "$TEST_ROOT"' EXIT HUP INT TERM
 
 export PERSISTENT_DIR="$TEST_ROOT/SusAF"
 export MODULE_DIR="$TEST_ROOT/module"
+export SUSAF_NOTIFICATION_CMD="$TEST_ROOT/cmd"
 mkdir -p "$PERSISTENT_DIR/state" "$MODULE_DIR"
+
+cat > "$SUSAF_NOTIFICATION_CMD" <<'CMD'
+#!/bin/sh
+printf '%s\n' "$*" >> "$PERSISTENT_DIR/state/notifications.log"
+exit 0
+CMD
+chmod 755 "$SUSAF_NOTIFICATION_CMD"
 
 cat > "$MODULE_DIR/SusAF.sh" <<'WORKER'
 #!/bin/sh
@@ -54,6 +62,7 @@ status=$(coverage_scan_background_status)
 printf '%s\n' "$status" | grep -Fqx 'status=idle'
 grep -Fqx 'status=complete' "$PERSISTENT_DIR/state/coverage.progress.txt"
 grep -Fqx 'schema=2' "$PERSISTENT_DIR/state/coverage.report.txt"
+grep -Fq 'notification post -t SusAF susaf-audit Audit complete' "$PERSISTENT_DIR/state/notifications.log"
 
 if coverage_scan_background 'bad;package' >/dev/null 2>&1; then
     echo 'unsafe background package accepted' >&2
