@@ -23,13 +23,33 @@ probe_parse_reply() {
 
 probe_check_batch() {
     local file="$1" out="$2" start="$3" stop="$4"
-    local payload reply parsed uid remainder size states expected_count
+    local payload reply parsed uid remainder size states expected_count attempt rc
     payload=$(awk -F '\t' -v first="$start" -v last="$stop" '
         NR>=first && NR<=last { if (NR>first) printf "\n"; printf "%s", $1 }
     ' "$file") || return 1
     [ -n "$payload" ] || return 1
-    reply=$("$PROBE_CONTENT_BIN" call --uri content://com.fgjaee.susaf.probe --method scan --arg "$payload" 2>&1) || return 1
-    parsed=$(probe_parse_reply "$reply")
+    parsed=""
+    attempt=1
+    while [ "$attempt" -le 3 ]; do
+        if reply=$("$PROBE_CONTENT_BIN" call --uri content://com.fgjaee.susaf.probe --method scan --arg "$payload" 2>&1); then
+            parsed=$(probe_parse_reply "$reply" 2>/dev/null) || parsed=""
+            [ -n "$parsed" ] && break
+        else
+            rc=$?
+        fi
+        rc=${rc:-0}
+        mkdir -p "$PERSISTENT_DIR/state" 2>/dev/null || true
+        {
+            printf 'epoch=%s\n' "$(date +%s 2>/dev/null)"
+            printf 'attempt=%s\n' "$attempt"
+            printf 'exit=%s\n' "$rc"
+            printf 'reply=%s\n' "$(printf '%s' "$reply" | tr '\r\n\t' '   ' | sed 's/[[:cntrl:]]//g' | cut -c1-500)"
+        } > "$PERSISTENT_DIR/state/probe.last_error.txt" 2>/dev/null || true
+        chmod 600 "$PERSISTENT_DIR/state/probe.last_error.txt" 2>/dev/null || true
+        [ "$attempt" -ge 3 ] || sleep "${SUSAF_PROBE_RETRY_DELAY:-1}"
+        attempt=$((attempt + 1))
+        rc=
+    done
     [ -n "$parsed" ] || return 1
     uid=${parsed%%|*}
     remainder=${parsed#*|}

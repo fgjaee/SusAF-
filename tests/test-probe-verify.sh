@@ -8,6 +8,8 @@ mkdir -p "$PERSISTENT_DIR" "$TEST_ROOT/bin"
 printf '# empty\n' > "$PERSISTENT_DIR/sus_paths.txt"
 printf '# empty\n' > "$PERSISTENT_DIR/sus_paths_loop.txt"
 export PERSISTENT_DIR
+export SUSAF_PROBE_RETRY_DELAY=0
+export SUSAF_FAKE_PROBE_STATE="$TEST_ROOT/probe-retry-state"
 
 cat > "$TEST_ROOT/bin/pm" <<'EOF'
 #!/bin/sh
@@ -19,6 +21,11 @@ chmod 755 "$TEST_ROOT/bin/pm"
 
 cat > "$TEST_ROOT/bin/content" <<'EOF'
 #!/bin/sh
+if [ "${SUSAF_FAKE_PROBE_FAIL_ONCE:-0}" = 1 ] && [ ! -e "${SUSAF_FAKE_PROBE_STATE:-/nonexistent}" ]; then
+    : > "$SUSAF_FAKE_PROBE_STATE"
+    echo 'transient provider failure' >&2
+    exit 1
+fi
 payload=
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -61,6 +68,18 @@ probe_verify_file "$f"
 [ "$(awk -F '\t' '$6=="MISSING" {n++} END {print n+0}' "$f")" = 1 ]
 [ "$(awk -F '\t' '$6=="DENIED" {n++} END {print n+0}' "$f")" = 1 ]
 [ "$(awk -F '\t' '$7=="10142" {n++} END {print n+0}' "$f")" = 3 ]
+
+# Transient provider failure should recover on retry.
+rm -f "$SUSAF_FAKE_PROBE_STATE"
+SUSAF_FAKE_PROBE_FAIL_ONCE=1; export SUSAF_FAKE_PROBE_FAIL_ONCE
+{
+    printf '/data/local/tmp/ksud\tfile\ttemp-root\tnot-listed\tloop\n'
+    printf '/data/local/tmp/temp_su.sock\tsocket\ttemp-root\tnot-listed\tloop\n'
+} > "$f"
+probe_verify_file "$f"
+[ "$PROBE_STATUS" = ready ]
+[ -e "$SUSAF_FAKE_PROBE_STATE" ]
+unset SUSAF_FAKE_PROBE_FAIL_ONCE
 
 EXPOSURE_TMP_CHECK=checked
 EXPOSURE_APEX_CHECK=checked

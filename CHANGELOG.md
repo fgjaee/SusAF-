@@ -1,5 +1,13 @@
 # Sus'AF Changelog
 
+## v0.1.0-dev.17 — 2026-10-30
+
+- Makes persistent background audit progress/report state authoritative when Module WebUI IPC is interrupted.
+- Adds a 15-second completion grace window so PID cleanup cannot be misreported as an audit failure.
+- Refuses to accept a stale prior report as the result of a newly completed audit.
+- Retries transient ordinary-app verifier provider calls up to three times and records the last failed reply in `state/probe.last_error.txt`.
+
+
 ## v0.1.0-dev.16 — 2026-10-30
 
 - Fixes background audits on KernelSU/BakaSU managers whose Module WebUI root shell remains inside the manager app cgroup.

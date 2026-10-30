@@ -373,20 +373,43 @@ async function getCoverageBackgroundStatus() {
 }
 
 async function waitForCoverageBackground(sequence) {
+    let idleSince = 0;
     while (sequence === coverageRequestSequence) {
         await pollCoverageProgress();
         const status = await getCoverageBackgroundStatus();
-        if (!status || status.status !== 'running') {
-            const progressResult = await exec(`cat "${basePath}/state/coverage.progress.txt" 2>/dev/null`);
-            const progress = progressResult.errno === 0 && progressResult.stdout.trim()
-                ? parseDiagnostics(progressResult.stdout) : null;
-            if (progress?.status === 'failed') {
-                throw new Error(progress.detail || 'background coverage scan failed');
-            }
+        const progressResult = await exec('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
+        const progress = progressResult.errno === 0 && progressResult.stdout.trim()
+            ? parseDiagnostics(progressResult.stdout) : null;
 
-            const report = await exec(`cat "${basePath}/state/coverage.report.txt" 2>/dev/null`);
-            if (report.errno === 0 && report.stdout.trim()) return report.stdout;
-            throw new Error('background coverage scan ended without a report');
+        if (progress?.operation === 'audit' && progress.status === 'failed') {
+            throw new Error(progress.detail || 'background coverage scan failed');
+        }
+
+        if (progress?.operation === 'audit' && progress.status === 'complete') {
+            const report = await exec('cat "' + basePath + '/state/coverage.report.txt" 2>/dev/null');
+            if (report.errno === 0 && report.stdout.trim()) {
+                const values = parseDiagnostics(report.stdout);
+                const generated = Number.parseInt(values['generated.epoch'] || '0', 10);
+                const updated = Number.parseInt(progress['updated.epoch'] || '0', 10);
+                const sameRun = values.schema === '2'
+                    && values.result === 'ok'
+                    && values['audit.completed'] === '1'
+                    && generated > 0 && updated > 0
+                    && generated <= updated && (updated - generated) <= 120;
+                if (sameRun) return report.stdout;
+            }
+        }
+
+        if (status?.status === 'running') {
+            idleSince = 0;
+        } else {
+            if (!idleSince) idleSince = Date.now();
+            // The worker removes its PID at completion. Give progress/report
+            // state time to settle instead of turning that normal race into
+            // a false red failure in the WebUI.
+            if (Date.now() - idleSince >= 15000) {
+                throw new Error('background audit stopped before committing a current report');
+            }
         }
         await new Promise(resolve => window.setTimeout(resolve, 900));
     }
@@ -394,15 +417,32 @@ async function waitForCoverageBackground(sequence) {
 }
 
 async function startCoverageBackground(packageName = '') {
-    const command = `sh "${moduleDirectory}/SusAF.sh" --coverage-scan-background${packageName ? ` "${packageName}"` : ''}`;
+    const command = 'sh "' + moduleDirectory + '/SusAF.sh" --coverage-scan-background'
+        + (packageName ? ' "' + packageName + '"' : '');
     const result = await exec(command);
-    if (result.errno !== 0) throw new Error(result.stderr || result.stdout || 'could not start background audit');
-    return parseDiagnostics(result.stdout);
+    if (result.errno === 0 && result.stdout.trim()) return parseDiagnostics(result.stdout);
+
+    // The WebUI exec reply can be interrupted when the manager is backgrounded
+    // after the detached worker has already started. Persistent state wins.
+    const status = await getCoverageBackgroundStatus().catch(() => null);
+    const progressResult = await exec('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
+    const progress = progressResult.errno === 0 && progressResult.stdout.trim()
+        ? parseDiagnostics(progressResult.stdout) : null;
+    if (status?.status === 'running'
+        || (progress?.operation === 'audit'
+            && (progress.status === 'running' || progress.status === 'complete'))) {
+        return status || { status: progress.status };
+    }
+    throw new Error(result.stderr || result.stdout || 'could not start background audit');
 }
 
 async function resumeCoverageBackground() {
     const status = await getCoverageBackgroundStatus();
-    if (!status || status.status !== 'running') return;
+    const progressResult = await exec('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
+    const progress = progressResult.errno === 0 && progressResult.stdout.trim()
+        ? parseDiagnostics(progressResult.stdout) : null;
+    if (status?.status !== 'running'
+        && !(progress?.operation === 'audit' && progress.status === 'running')) return;
 
     const sequence = ++coverageRequestSequence;
     setCoverageBusy(true);
