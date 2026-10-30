@@ -69,16 +69,20 @@ probe_verify_file "$f"
 [ "$(awk -F '\t' '$6=="DENIED" {n++} END {print n+0}' "$f")" = 1 ]
 [ "$(awk -F '\t' '$7=="10142" {n++} END {print n+0}' "$f")" = 3 ]
 
-# Transient provider failure should recover on retry.
+# Transient provider failure should recover on retry without mutating
+# the main evidence fixture used by the assertions below.
+retry_f="$TEST_ROOT/retry.tsv"
 rm -f "$SUSAF_FAKE_PROBE_STATE"
 SUSAF_FAKE_PROBE_FAIL_ONCE=1; export SUSAF_FAKE_PROBE_FAIL_ONCE
 {
     printf '/data/local/tmp/ksud\tfile\ttemp-root\tnot-listed\tloop\n'
     printf '/data/local/tmp/temp_su.sock\tsocket\ttemp-root\tnot-listed\tloop\n'
-} > "$f"
-probe_verify_file "$f"
+} > "$retry_f"
+probe_verify_file "$retry_f"
 [ "$PROBE_STATUS" = ready ]
 [ -e "$SUSAF_FAKE_PROBE_STATE" ]
+[ "$(awk -F '\t' '$6=="VISIBLE" {n++} END {print n+0}' "$retry_f")" = 1 ]
+[ "$(awk -F '\t' '$6=="MISSING" {n++} END {print n+0}' "$retry_f")" = 1 ]
 unset SUSAF_FAKE_PROBE_FAIL_ONCE
 
 EXPOSURE_TMP_CHECK=checked
