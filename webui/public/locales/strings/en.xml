@@ -345,7 +345,7 @@
     <string name="coverage_progress_working">Working…</string>
     <string name="coverage_progress_count">%1$s of %2$s checked</string>
     <string name="coverage_progress_elapsed">%s seconds</string>
-    <string name="coverage_progress_hint">Your phone may briefly slow down while mount namespaces and process maps are inspected. Keep this screen open.</string>
+    <string name="coverage_progress_hint">Your phone may briefly slow down while mount namespaces and process maps are inspected. You can leave this screen; the audit will continue in the background.</string>
     <string name="coverage_progress_complete_stage">Complete</string>
     <string name="coverage_progress_failed_stage">Operation failed</string>
     <string name="coverage_progress_attention_stage">Review required</string>

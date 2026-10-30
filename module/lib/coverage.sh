@@ -46,20 +46,83 @@ coverage_background_package_file() {
 	printf '%s\n' "$PERSISTENT_DIR/state/coverage.audit.package"
 }
 
+coverage_background_launch_file() {
+	printf '%s\n' "$PERSISTENT_DIR/state/coverage.audit.launch"
+}
+
+coverage_pid_is_worker() {
+	local pid="$1" state cmdline
+	case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+	[ -r "/proc/$pid/stat" ] && [ -r "/proc/$pid/cmdline" ] || return 1
+	state=$(awk '{ print $3 }' "/proc/$pid/stat" 2>/dev/null)
+	[ "$state" != Z ] || return 1
+	cmdline=$(tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+	case "$cmdline" in
+		*"SusAF.sh --coverage-scan-worker"*) return 0 ;;
+	esac
+	return 1
+}
+
+coverage_in_app_cgroup() {
+	[ -r /proc/self/cgroup ] || return 1
+	grep -q '/apps/' /proc/self/cgroup 2>/dev/null
+}
+
+coverage_spawn_worker() {
+	local package="$1" log="$2" launch pid=""
+	launch="sh \"$MODULE_DIR/SusAF.sh\" --coverage-scan-worker \"$package\" > \"$log\" 2>&1 < /dev/null"
+
+	# KernelSU/BakaSU Module WebUI root shells can inherit the manager app
+	# cgroup. setsid/nohup changes parent/session state but not cgroup membership,
+	# so Android may freeze or kill the audit when the manager is backgrounded.
+	# Re-enter through the ordinary su path when this shell is in /apps/:
+	# KernelSU-style root_shell() moves itself out of the app cgroup first.
+	if coverage_in_app_cgroup && command -v su >/dev/null 2>&1; then
+		pid=$(su -c "$launch & echo \$!" 2>/dev/null | tail -n 1)
+		case "$pid" in
+			''|*[!0-9]*) pid="" ;;
+			*) printf '%s|su-cgroup-escape\n' "$pid"; return 0 ;;
+		esac
+	fi
+
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+		pid=$!
+		printf '%s|setsid\n' "$pid"
+	elif command -v busybox >/dev/null 2>&1; then
+		busybox setsid sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+		pid=$!
+		printf '%s|busybox-setsid\n' "$pid"
+	elif command -v nohup >/dev/null 2>&1; then
+		nohup sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+		pid=$!
+		printf '%s|nohup\n' "$pid"
+	else
+		sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+		pid=$!
+		printf '%s|shell-background\n' "$pid"
+	fi
+}
+
 coverage_scan_background_status() {
-	local pid_file package_file pid="" package="" status=idle
+	local pid_file package_file launch_file pid="" package="" launch_mode="" status=idle
 	pid_file=$(coverage_background_pid_file)
 	package_file=$(coverage_background_package_file)
+	launch_file=$(coverage_background_launch_file)
 	[ -f "$pid_file" ] && pid=$(sed -n '1p' "$pid_file" 2>/dev/null)
 	[ -f "$package_file" ] && package=$(sed -n '1p' "$package_file" 2>/dev/null)
-	case "$pid" in
-		''|*[!0-9]*) pid="" ;;
-		*) if kill -0 "$pid" 2>/dev/null; then status=running; else pid=""; rm -f "$pid_file" "$package_file"; fi ;;
-	esac
+	[ -f "$launch_file" ] && launch_mode=$(sed -n '1p' "$launch_file" 2>/dev/null)
+	if coverage_pid_is_worker "$pid"; then
+		status=running
+	else
+		pid=""
+		rm -f "$pid_file" "$package_file" "$launch_file"
+	fi
 	coverage_put schema 1
 	coverage_put status "$status"
 	coverage_put pid "${pid:-none}"
 	coverage_put package "${package:-all-running-apps}"
+	coverage_put launch_mode "${launch_mode:-none}"
 }
 
 coverage_notify_audit() {
@@ -99,7 +162,7 @@ coverage_scan_worker() {
 		coverage_progress_write failed 0 0 failed audit_failed
 		coverage_notify_audit failed "$package"
 	fi
-	rm -f "$(coverage_background_pid_file)" "$(coverage_background_package_file)"
+	rm -f "$(coverage_background_pid_file)" "$(coverage_background_package_file)" "$(coverage_background_launch_file)"
 	return "$rc"
 }
 
@@ -124,23 +187,20 @@ coverage_scan_background() {
 	COVERAGE_OPERATION=audit
 	coverage_progress_write preparing 0 0 running queued_background_audit
 
-	if command -v setsid >/dev/null 2>&1; then
-		setsid sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
-	elif command -v busybox >/dev/null 2>&1; then
-		busybox setsid sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
-	elif command -v nohup >/dev/null 2>&1; then
-		nohup sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
-	else
-		sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
-	fi
-	pid=$!
+	local spawn launch_mode launch_file
+	launch_file=$(coverage_background_launch_file)
+	spawn=$(coverage_spawn_worker "$package" "$log") || { rm -f "$package_file"; return 1; }
+	pid=${spawn%%|*}
+	launch_mode=${spawn#*|}
 	case "$pid" in ''|*[!0-9]*) rm -f "$package_file"; return 1 ;; esac
 	printf '%s\n' "$pid" > "$pid_file" || return 1
-	chmod 600 "$pid_file" "$log" 2>/dev/null
+	printf '%s\n' "$launch_mode" > "$launch_file" || return 1
+	chmod 600 "$pid_file" "$launch_file" "$log" 2>/dev/null
 	coverage_put schema 1
 	coverage_put status started
 	coverage_put pid "$pid"
 	coverage_put package "${package:-all-running-apps}"
+	coverage_put launch_mode "$launch_mode"
 }
 
 coverage_property() {

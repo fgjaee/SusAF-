@@ -1,5 +1,13 @@
 # Sus'AF Changelog
 
+## v0.1.0-dev.16 — 2026-10-30
+
+- Fixes background audits on KernelSU/BakaSU managers whose Module WebUI root shell remains inside the manager app cgroup.
+- When launched from an Android `/apps/` cgroup, the audit worker now re-enters through the ordinary `su` path before detaching so it can escape app freezing/cleanup.
+- Background status now rejects zombie or PID-reused workers instead of trusting `kill -0` alone.
+- The audit overlay now tells users they may leave the screen while the detached audit continues.
+
+
 ## v0.1.0-dev.15 — 2026-10-29
 
 - Posts a best-effort Android notification when a detached audit completes or fails.
