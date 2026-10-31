@@ -1,5 +1,14 @@
 # Sus'AF Changelog
 
+## v0.1.0-dev.18 — 2026-10-30
+
+- Adds reversible Security Hardening Mode for real Android debugging-surface changes rather than detector spoofing.
+- Enter snapshots Developer Options, USB/wireless ADB settings, adbd state, and USB configuration before changing anything.
+- Hardening Mode disables Developer Options and ADB, stops adbd, and removes only the adb USB token while preserving other USB functions.
+- Restore replays the saved state and archives the snapshot for troubleshooting.
+- Adds UserHub Enter, Status, Restore, and read-only Security Exposure Audit scripts.
+
+
 ## v0.1.0-dev.17 — 2026-10-30
 
 - Makes persistent background audit progress/report state authoritative when Module WebUI IPC is interrupted.

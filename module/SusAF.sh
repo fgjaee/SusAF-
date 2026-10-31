@@ -17,6 +17,7 @@ select_susfs_binary "$SUSFS_MIN_VERSION" || true
 . "$MODDIR/lib/exposure-audit.sh"
 . "$MODDIR/lib/probe-verify.sh"
 . "$MODDIR/lib/config-control.sh"
+. "$MODDIR/lib/security-hardening.sh"
 
 versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
 
@@ -458,6 +459,9 @@ show_help () {
 	printf " --coverage-verify \t\t\trescan and verify the generated policy\n"
 	printf " --coverage-rollback \t\trestore the last Autopilot checkpoint\n"
 	printf " --autopilot-boot \t\t\tscan and apply safe candidates after boot\n"
+	printf " --hardening-enter \t\t\tenter reversible security hardening mode\n"
+	printf " --hardening-status \t\t\tshow security hardening mode state\n"
+	printf " --hardening-restore \t\t\trestore pre-hardening debugging state\n"
 	printf "\n"
 	printf "if [file] is given it is appended (deduped) into the default list, then applied:\n"
 	printf " --apply-sus-paths [file] \t\tadd_sus_path from list\n"
@@ -504,6 +508,9 @@ case "$1" in
 	--coverage-verify) coverage_verify; exit ;;
 	--coverage-rollback) coverage_rollback; exit ;;
 	--autopilot-boot) coverage_autopilot_boot; exit ;;
+	--hardening-enter) hardening_enter; exit ;;
+	--hardening-status) hardening_status; exit ;;
+	--hardening-restore) hardening_restore; exit ;;
 	--apply-sus-paths) apply_sus_paths "$2"; exit ;;
 	--apply-sus-paths-loop) apply_sus_paths_loop "$2"; exit ;;
 	--apply-sus-paths-loop-direct) apply_sus_paths_loop_direct "$2"; exit ;;
