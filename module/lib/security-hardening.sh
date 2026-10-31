@@ -21,6 +21,7 @@ hardening_init() {
     HARDEN_GETPROP_BIN="${SUSAF_GETPROP_BIN:-/system/bin/getprop}"
     HARDEN_SETPROP_BIN="${SUSAF_SETPROP_BIN:-/system/bin/setprop}"
     HARDEN_PIDOF_BIN="${SUSAF_PIDOF_BIN:-/system/bin/pidof}"
+    HARDEN_SVC_BIN="${SUSAF_SVC_BIN:-/system/bin/svc}"
     HARDEN_SLEEP_BIN="${SUSAF_SLEEP_BIN:-/system/bin/sleep}"
     HARDEN_RESETPROP_BIN="${SUSAF_RESETPROP_BIN:-}"
     if [ -z "$HARDEN_RESETPROP_BIN" ]; then
@@ -69,12 +70,74 @@ hardening_remove_adb_token() {
 
 hardening_write_persist_usb() {
     value="$1"
-    if [ -n "$HARDEN_RESETPROP_BIN" ] && [ -x "$HARDEN_RESETPROP_BIN" ]; then
-        "$HARDEN_RESETPROP_BIN" persist.sys.usb.config "$value" >/dev/null 2>&1 && return 0
-    fi
-    "$HARDEN_SETPROP_BIN" persist.sys.usb.config "$value" >/dev/null 2>&1
+    tries=0
+    while [ "$tries" -lt 3 ]; do
+        if [ -n "$HARDEN_RESETPROP_BIN" ] && [ -x "$HARDEN_RESETPROP_BIN" ]; then
+            "$HARDEN_RESETPROP_BIN" persist.sys.usb.config "$value" >/dev/null 2>&1 || true
+        fi
+        "$HARDEN_SETPROP_BIN" persist.sys.usb.config "$value" >/dev/null 2>&1 || true
+        [ "$(hardening_read_prop persist.sys.usb.config)" = "$value" ] && return 0
+        "$HARDEN_SLEEP_BIN" 1
+        tries=$((tries + 1))
+    done
+    return 1
 }
 
+hardening_adb_token_present() {
+    case ",$1," in
+        *,adb,*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+hardening_put_setting() {
+    key="$1"
+    wanted="$2"
+    tries=0
+    while [ "$tries" -lt 3 ]; do
+        "$HARDEN_SETTINGS_BIN" put global "$key" "$wanted" >/dev/null 2>&1 || true
+        [ "$(hardening_read_setting "$key")" = "$wanted" ] && return 0
+        "$HARDEN_SLEEP_BIN" 1
+        tries=$((tries + 1))
+    done
+    return 1
+}
+
+hardening_stop_adbd() {
+    tries=0
+    while [ "$tries" -lt 4 ]; do
+        "$HARDEN_SETPROP_BIN" ctl.stop adbd >/dev/null 2>&1 || true
+        [ -z "$(hardening_adbd_pids)" ] && return 0
+        "$HARDEN_SLEEP_BIN" 1
+        tries=$((tries + 1))
+    done
+    return 1
+}
+
+hardening_set_current_usb_no_adb() {
+    current=$(hardening_read_prop sys.usb.config)
+    desired=$(hardening_remove_adb_token "$current")
+    tries=0
+    while [ "$tries" -lt 3 ]; do
+        if [ -x "$HARDEN_SVC_BIN" ]; then
+            "$HARDEN_SVC_BIN" usb setFunctions "$desired" >/dev/null 2>&1 || true
+        fi
+        "$HARDEN_SETPROP_BIN" sys.usb.config "$desired" >/dev/null 2>&1 || true
+        current=$(hardening_read_prop sys.usb.config)
+        hardening_adb_token_present "$current" || return 0
+        "$HARDEN_SLEEP_BIN" 1
+        tries=$((tries + 1))
+    done
+    return 1
+}
+
+hardening_write_current_usb_exact() {
+    value="$1"
+    if [ -x "$HARDEN_SVC_BIN" ]; then
+        "$HARDEN_SVC_BIN" usb setFunctions "$value" >/dev/null 2>&1 || true
+    fi
+    "$HARDEN_SETPROP_BIN" sys.usb.config "$value" >/dev/null 2>&1 || true
+}
 hardening_snapshot() {
     hardening_init || return 1
     file=$(hardening_snapshot_file)
@@ -103,22 +166,45 @@ hardening_snapshot_value() {
 hardening_status() {
     hardening_init || return 1
     snapshot=$(hardening_snapshot_file)
-    [ -f "$snapshot" ] && active=1 || active=0
+    [ -f "$snapshot" ] && snapshot_state=present || snapshot_state=none
+
+    dev=$(hardening_read_setting development_settings_enabled)
+    adb=$(hardening_read_setting adb_enabled)
+    wifi=$(hardening_read_setting adb_wifi_enabled)
+    adbd=$(hardening_read_prop init.svc.adbd)
+    pids=$(hardening_adbd_pids)
+    sys=$(hardening_read_prop sys.usb.config)
     persist=$(hardening_read_prop persist.sys.usb.config)
-    echo "schema=1"
-    echo "active=$active"
-    echo "snapshot=$([ -f "$snapshot" ] && printf present || printf none)"
-    echo "development_settings_enabled=$(hardening_read_setting development_settings_enabled)"
-    echo "adb_enabled=$(hardening_read_setting adb_enabled)"
-    echo "adb_wifi_enabled=$(hardening_read_setting adb_wifi_enabled)"
-    echo "init.svc.adbd=$(hardening_read_prop init.svc.adbd)"
-    echo "adbd_pids=$(hardening_adbd_pids)"
-    echo "sys.usb.config=$(hardening_read_prop sys.usb.config)"
+
+    hardened=1
+    [ "$dev" = 0 ] || hardened=0
+    [ "$adb" = 0 ] || hardened=0
+    [ "$wifi" = 0 ] || hardened=0
+    [ -z "$pids" ] || hardened=0
+    hardening_adb_token_present "$sys" && hardened=0
+    hardening_adb_token_present "$persist" && hardened=0
+
+    if [ "$hardened" -eq 1 ]; then
+        state=active
+    elif [ "$snapshot_state" = present ]; then
+        state=partial
+    else
+        state=inactive
+    fi
+
+    echo "schema=2"
+    echo "state=$state"
+    echo "active=$hardened"
+    echo "snapshot=$snapshot_state"
+    echo "development_settings_enabled=$dev"
+    echo "adb_enabled=$adb"
+    echo "adb_wifi_enabled=$wifi"
+    echo "init.svc.adbd=$adbd"
+    echo "adbd_pids=$pids"
+    echo "sys.usb.config=$sys"
     echo "persist.sys.usb.config=$persist"
-    case ",$persist," in
-        *,adb,*) echo "usb_adb_token=present" ;;
-        *) echo "usb_adb_token=absent" ;;
-    esac
+    hardening_adb_token_present "$sys" && echo "sys_usb_adb_token=present" || echo "sys_usb_adb_token=absent"
+    hardening_adb_token_present "$persist" && echo "persist_usb_adb_token=present" || echo "persist_usb_adb_token=absent"
 }
 
 hardening_enter() {
@@ -127,55 +213,45 @@ hardening_enter() {
     report=$(hardening_report_file)
     umask 077
     {
-        echo "schema=1"
+        echo "schema=2"
         echo "operation=enter"
         echo "started.epoch=$(date +%s 2>/dev/null)"
     } > "$report"
 
-    for key in development_settings_enabled adb_enabled adb_wifi_enabled; do
-        "$HARDEN_SETTINGS_BIN" put global "$key" 0 >/dev/null 2>&1 || {
-            echo "result=settings-write-failed:$key" >> "$report"
-            cat "$report"
-            return 1
-        }
-    done
+    # Android 17 can reassert ADB from framework observers while these values
+    # change. Apply the shutdown in stages, then repeat the decisive controls.
+    hardening_put_setting adb_wifi_enabled 0 || echo "warning=wireless-debugging-reasserted" >> "$report"
+    hardening_put_setting adb_enabled 0 || echo "warning=usb-debugging-reasserted" >> "$report"
 
     persist=$(hardening_read_prop persist.sys.usb.config)
-    sys=$(hardening_read_prop sys.usb.config)
     desired_persist=$(hardening_remove_adb_token "$persist")
-    desired_sys=$(hardening_remove_adb_token "$sys")
 
-    hardening_write_persist_usb "$desired_persist" || {
-        echo "result=persist-usb-write-failed" >> "$report"
-        cat "$report"
-        return 1
-    }
-    case ",$sys," in
-        *,adb,*) "$HARDEN_SETPROP_BIN" sys.usb.config "$desired_sys" >/dev/null 2>&1 || true ;;
-    esac
+    hardening_stop_adbd || echo "warning=adbd-still-running-first-pass" >> "$report"
+    hardening_set_current_usb_no_adb || echo "warning=current-usb-adb-reasserted-first-pass" >> "$report"
+    hardening_write_persist_usb "$desired_persist" || echo "warning=persist-usb-adb-reasserted-first-pass" >> "$report"
 
-    "$HARDEN_SETPROP_BIN" ctl.stop adbd >/dev/null 2>&1 || {
-        echo "result=adbd-stop-request-failed" >> "$report"
-        cat "$report"
-        return 1
-    }
+    hardening_put_setting development_settings_enabled 0 || echo "warning=developer-options-reasserted" >> "$report"
 
-    wait_count=0
-    while [ "$wait_count" -lt 5 ] && [ -n "$(hardening_adbd_pids)" ]; do
-        "$HARDEN_SLEEP_BIN" 1
-        wait_count=$((wait_count + 1))
-    done
+    # Final enforcement pass after Developer Options changed. This catches the
+    # framework/property race seen on Pixel Android 17.
+    hardening_put_setting adb_wifi_enabled 0 || true
+    hardening_put_setting adb_enabled 0 || true
+    hardening_stop_adbd || true
+    hardening_set_current_usb_no_adb || true
+    hardening_write_persist_usb "$desired_persist" || true
+    "$HARDEN_SLEEP_BIN" 1
 
     hardening_status >> "$report"
-    [ "$(hardening_read_setting development_settings_enabled)" = 0 ] || { echo "result=verification-failed:developer-options" >> "$report"; cat "$report"; return 1; }
-    [ "$(hardening_read_setting adb_enabled)" = 0 ] || { echo "result=verification-failed:usb-debugging" >> "$report"; cat "$report"; return 1; }
-    [ "$(hardening_read_setting adb_wifi_enabled)" = 0 ] || { echo "result=verification-failed:wireless-debugging" >> "$report"; cat "$report"; return 1; }
-    [ -z "$(hardening_adbd_pids)" ] || { echo "result=verification-failed:adbd" >> "$report"; cat "$report"; return 1; }
-    case ",$(hardening_read_prop persist.sys.usb.config)," in
-        *,adb,*) echo "result=verification-failed:usb-config" >> "$report"; cat "$report"; return 1 ;;
-    esac
-    echo "result=active" >> "$report"
+    final_state=$(sed -n 's/^state=//p' "$report" | tail -n1)
+    if [ "$final_state" = active ]; then
+        echo "result=active" >> "$report"
+        cat "$report"
+        return 0
+    fi
+
+    echo "result=verification-failed:partial-hardening" >> "$report"
     cat "$report"
+    return 1
 }
 
 hardening_restore_setting() {
@@ -193,7 +269,20 @@ hardening_restore() {
     umask 077
     { echo "schema=1"; echo "operation=restore"; echo "started.epoch=$(date +%s 2>/dev/null)"; } > "$report"
 
-    for key in development_settings_enabled adb_enabled adb_wifi_enabled; do
+    # Restore Developer Options first so Android will accept the saved ADB state.
+    hardening_restore_setting development_settings_enabled || {
+        echo "result=settings-restore-failed:development_settings_enabled" >> "$report"
+        cat "$report"
+        return 1
+    }
+
+    persist=$(hardening_snapshot_value persist.sys.usb.config)
+    sys=$(hardening_snapshot_value sys.usb.config)
+    adbd=$(hardening_snapshot_value init.svc.adbd)
+    case "$persist" in ""|unavailable) ;; *) hardening_write_persist_usb "$persist" || { echo "result=persist-usb-restore-failed" >> "$report"; cat "$report"; return 1; } ;; esac
+    case "$sys" in ""|unavailable) ;; *) hardening_write_current_usb_exact "$sys" ;; esac
+
+    for key in adb_enabled adb_wifi_enabled; do
         hardening_restore_setting "$key" || {
             echo "result=settings-restore-failed:$key" >> "$report"
             cat "$report"
@@ -201,11 +290,6 @@ hardening_restore() {
         }
     done
 
-    persist=$(hardening_snapshot_value persist.sys.usb.config)
-    sys=$(hardening_snapshot_value sys.usb.config)
-    adbd=$(hardening_snapshot_value init.svc.adbd)
-    case "$persist" in ""|unavailable) ;; *) hardening_write_persist_usb "$persist" || { echo "result=persist-usb-restore-failed" >> "$report"; cat "$report"; return 1; } ;; esac
-    case "$sys" in ""|unavailable) ;; *) "$HARDEN_SETPROP_BIN" sys.usb.config "$sys" >/dev/null 2>&1 || true ;; esac
     case "$adbd" in running|restarting) "$HARDEN_SETPROP_BIN" ctl.start adbd >/dev/null 2>&1 || true ;; esac
 
     archived="$(hardening_state_dir)/security-hardening.last-snapshot"

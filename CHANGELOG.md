@@ -1,5 +1,12 @@
 # Sus'AF Changelog
 
+## v0.1.0-dev.18.1 — 2026-10-31
+
+- Fixes Pixel Android 17 hardening where `adb_enabled`, wireless debugging, `adbd`, or persistent USB configuration could be reasserted after the first write.
+- Hardening now uses staged/retried settings, `svc usb setFunctions`, repeated `adbd` shutdown, and final state verification.
+- `active=1` now means the phone is actually hardened; a saved snapshot with incomplete changes reports `state=partial` instead.
+- Restore now re-enables Developer Options before replaying the saved USB/ADB state.
+
 ## v0.1.0-dev.18 — 2026-10-30
 
 - Adds reversible Security Hardening Mode for real Android debugging-surface changes rather than detector spoofing.

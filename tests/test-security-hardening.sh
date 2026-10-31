@@ -71,6 +71,7 @@ export SUSAF_SETTINGS_BIN="$T/bin/settings"
 export SUSAF_GETPROP_BIN="$T/bin/getprop"
 export SUSAF_SETPROP_BIN="$T/bin/setprop"
 export SUSAF_PIDOF_BIN="$T/bin/pidof"
+export SUSAF_SVC_BIN="$T/bin/svc"
 export SUSAF_SLEEP_BIN="$T/bin/sleep"
 export SUSAF_RESETPROP_BIN="/nonexistent"
 
@@ -85,8 +86,10 @@ hardening_enter >/dev/null
 [ -f "$PERSISTENT_DIR/state/security-hardening.snapshot" ]
 
 status=$(hardening_status)
+printf "%s\n" "$status" | grep -Fqx "state=active"
 printf "%s\n" "$status" | grep -Fqx "active=1"
-printf "%s\n" "$status" | grep -Fqx "usb_adb_token=absent"
+printf "%s\n" "$status" | grep -Fqx "sys_usb_adb_token=absent"
+printf "%s\n" "$status" | grep -Fqx "persist_usb_adb_token=absent"
 
 hardening_restore >/dev/null
 [ "$(sed -n 's/^development_settings_enabled=//p' "$T/settings.db")" = 1 ]
