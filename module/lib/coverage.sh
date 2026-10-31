@@ -38,6 +38,171 @@ coverage_progress_write() {
 	mv "$temp" "$output" 2>/dev/null || rm -f "$temp"
 }
 
+coverage_background_pid_file() {
+	printf '%s\n' "$PERSISTENT_DIR/state/coverage.audit.pid"
+}
+
+coverage_background_package_file() {
+	printf '%s\n' "$PERSISTENT_DIR/state/coverage.audit.package"
+}
+
+coverage_background_launch_file() {
+	printf '%s\n' "$PERSISTENT_DIR/state/coverage.audit.launch"
+}
+
+coverage_pid_is_worker() {
+	local pid="$1" state cmdline
+	case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+	[ -r "/proc/$pid/stat" ] && [ -r "/proc/$pid/cmdline" ] || return 1
+	state=$(awk '{ print $3 }' "/proc/$pid/stat" 2>/dev/null)
+	[ "$state" != Z ] || return 1
+	cmdline=$(tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+	case "$cmdline" in
+		*"SusAF.sh --coverage-scan-worker"*) return 0 ;;
+	esac
+	return 1
+}
+
+coverage_in_app_cgroup() {
+	[ -r /proc/self/cgroup ] || return 1
+	grep -q '/apps/' /proc/self/cgroup 2>/dev/null
+}
+
+coverage_spawn_worker() {
+	local package="$1" log="$2" launch pid=""
+	launch="sh \"$MODULE_DIR/SusAF.sh\" --coverage-scan-worker \"$package\" > \"$log\" 2>&1 < /dev/null"
+
+	# KernelSU/BakaSU Module WebUI root shells can inherit the manager app
+	# cgroup. setsid/nohup changes parent/session state but not cgroup membership,
+	# so Android may freeze or kill the audit when the manager is backgrounded.
+	# Re-enter through the ordinary su path when this shell is in /apps/:
+	# KernelSU-style root_shell() moves itself out of the app cgroup first.
+	if coverage_in_app_cgroup && command -v su >/dev/null 2>&1; then
+		pid=$(su -c "$launch & echo \$!" 2>/dev/null | tail -n 1)
+		case "$pid" in
+			''|*[!0-9]*) pid="" ;;
+			*) printf '%s|su-cgroup-escape\n' "$pid"; return 0 ;;
+		esac
+	fi
+
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+		pid=$!
+		printf '%s|setsid\n' "$pid"
+	elif command -v busybox >/dev/null 2>&1; then
+		busybox setsid sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+		pid=$!
+		printf '%s|busybox-setsid\n' "$pid"
+	elif command -v nohup >/dev/null 2>&1; then
+		nohup sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+		pid=$!
+		printf '%s|nohup\n' "$pid"
+	else
+		sh "$MODULE_DIR/SusAF.sh" --coverage-scan-worker "$package" > "$log" 2>&1 < /dev/null &
+		pid=$!
+		printf '%s|shell-background\n' "$pid"
+	fi
+}
+
+coverage_scan_background_status() {
+	local pid_file package_file launch_file pid="" package="" launch_mode="" status=idle
+	pid_file=$(coverage_background_pid_file)
+	package_file=$(coverage_background_package_file)
+	launch_file=$(coverage_background_launch_file)
+	[ -f "$pid_file" ] && pid=$(sed -n '1p' "$pid_file" 2>/dev/null)
+	[ -f "$package_file" ] && package=$(sed -n '1p' "$package_file" 2>/dev/null)
+	[ -f "$launch_file" ] && launch_mode=$(sed -n '1p' "$launch_file" 2>/dev/null)
+	if coverage_pid_is_worker "$pid"; then
+		status=running
+	else
+		pid=""
+		rm -f "$pid_file" "$package_file" "$launch_file"
+	fi
+	coverage_put schema 1
+	coverage_put status "$status"
+	coverage_put pid "${pid:-none}"
+	coverage_put package "${package:-all-running-apps}"
+	coverage_put launch_mode "${launch_mode:-none}"
+}
+
+coverage_notify_audit() {
+	local outcome="$1" package="${2:-}" cmd_bin title text
+	[ "${SUSAF_AUDIT_NOTIFICATIONS:-1}" = 1 ] || return 0
+	cmd_bin="${SUSAF_NOTIFICATION_CMD:-/system/bin/cmd}"
+	if [ ! -x "$cmd_bin" ]; then
+		cmd_bin=$(command -v cmd 2>/dev/null || true)
+	fi
+	[ -n "$cmd_bin" ] && [ -x "$cmd_bin" ] || return 0
+
+	title="SusAF"
+	case "$outcome" in
+		complete)
+			text="Audit complete"
+			;;
+		failed)
+			text="Audit failed"
+			;;
+		*) return 0 ;;
+	esac
+	[ -z "$package" ] || text="$text: $package"
+
+	# Best-effort only. A blocked notification channel must never change
+	# the audit result or leave the worker marked as running.
+	"$cmd_bin" notification post -t "$title" susaf-audit "$text" >/dev/null 2>&1 || true
+}
+
+coverage_scan_worker() {
+	local package="${1:-}" rc=0
+	if coverage_scan "$package"; then
+		rc=0
+		coverage_notify_audit complete "$package"
+	else
+		rc=$?
+		COVERAGE_OPERATION=audit
+		coverage_progress_write failed 0 0 failed audit_failed
+		coverage_notify_audit failed "$package"
+	fi
+	rm -f "$(coverage_background_pid_file)" "$(coverage_background_package_file)" "$(coverage_background_launch_file)"
+	return "$rc"
+}
+
+coverage_scan_background() {
+	local package="${1:-}" state_dir="$PERSISTENT_DIR/state" pid_file package_file log pid
+	if [ -n "$package" ] && ! coverage_package_is_safe "$package"; then
+		echo "[x] invalid package name: $package"
+		return 1
+	fi
+	mkdir -p "$state_dir" || return 1
+	pid_file=$(coverage_background_pid_file)
+	package_file=$(coverage_background_package_file)
+	log="$state_dir/coverage.background.log"
+
+	if [ "$(coverage_scan_background_status | sed -n 's/^status=//p')" = running ]; then
+		coverage_scan_background_status
+		return 0
+	fi
+
+	printf '%s\n' "$package" > "$package_file" || return 1
+	chmod 600 "$package_file" 2>/dev/null
+	COVERAGE_OPERATION=audit
+	coverage_progress_write preparing 0 0 running queued_background_audit
+
+	local spawn launch_mode launch_file
+	launch_file=$(coverage_background_launch_file)
+	spawn=$(coverage_spawn_worker "$package" "$log") || { rm -f "$package_file"; return 1; }
+	pid=${spawn%%|*}
+	launch_mode=${spawn#*|}
+	case "$pid" in ''|*[!0-9]*) rm -f "$package_file"; return 1 ;; esac
+	printf '%s\n' "$pid" > "$pid_file" || return 1
+	printf '%s\n' "$launch_mode" > "$launch_file" || return 1
+	chmod 600 "$pid_file" "$launch_file" "$log" 2>/dev/null
+	coverage_put schema 1
+	coverage_put status started
+	coverage_put pid "$pid"
+	coverage_put package "${package:-all-running-apps}"
+	coverage_put launch_mode "$launch_mode"
+}
+
 coverage_property() {
 	local file="$1" key="$2" fallback="${3:-}" value
 	value=$(awk -F= -v key="$key" '$1 == key { value=substr($0, index($0, "=") + 1) } END { print value }' "$file" 2>/dev/null)
@@ -100,7 +265,7 @@ coverage_path_is_curated() {
 		/data/media/0/MT2|/data/media/0/AppManager|/data/local/tmp/main.jar|\
 		/system/bin/su|/system/xbin/su|/vendor/bin/su|/sbin/su|/debug_ramdisk|\
 		/data/adb/ksu|/data/adb/ap|/data/adb/magisk|/data/adb/modules|\
-		/data/adb/modules_update|/data/adb/SusAF|/data/adb/ReSuSFS|/data/adb/susfs4ksu)
+		/data/adb/modules_update|/data/adb/SusAF|/data/adb/susfs4ksu)
 			return 0 ;;
 	esac
 	return 1
@@ -139,7 +304,7 @@ coverage_schedule_status() {
 coverage_add_candidate() {
 	local output="$1" kind="$2" target="$3" reason="$4" risk="$5" action="$6" scope="${7:-device}"
 	case "$kind" in
-		sus_map|sus_path_loop|kernel_umount) coverage_path_is_safe "$target" || return 1 ;;
+		sus_map|sus_path|sus_path_loop|kernel_umount) coverage_path_is_safe "$target" || return 1 ;;
 		config_toggle|kernel_feature) coverage_config_target_is_allowed "$target" || return 1 ;;
 		*) return 1 ;;
 	esac
@@ -180,7 +345,6 @@ coverage_collect_curated_paths() {
 /data/adb/modules|medium|root_module_path
 /data/adb/modules_update|medium|root_module_path
 /data/adb/SusAF|medium|susaf_runtime_path
-/data/adb/ReSuSFS|medium|legacy_runtime_path
 /data/adb/susfs4ksu|medium|legacy_runtime_path
 EOF
 }
@@ -299,9 +463,10 @@ coverage_collect_mount_namespaces() {
 	done
 	rm -f "$seen"
 	coverage_progress_write mount_namespaces "$COVERAGE_MOUNT_NAMESPACE_COUNT" "$COVERAGE_MOUNT_NAMESPACE_COUNT" running reading_mount_namespaces
-	if [ "$COVERAGE_HIGH_ID_COUNT" -gt 0 ] && [ "$(coverage_conf HIDE_SUS_MNTS_LATE 0)" != 1 ]; then
-		coverage_add_candidate "$output" config_toggle HIDE_SUS_MNTS_LATE=1 high_mount_id high spoof_mount_view app_namespaces
-	fi
+	# Large mount/peer/master/propagation IDs are retained as diagnostic
+	# telemetry only. Android 17 validation showed that every readable app
+	# namespace can legitimately use the same large-ID family, so ID magnitude
+	# alone must never generate a hiding-policy change.
 }
 
 coverage_collect_controls() {
@@ -320,15 +485,42 @@ coverage_collect_controls() {
 	coverage_add_candidate "$output" kernel_feature SELINUX_HIDE_MODE=enabled selinux_policy_visible medium spoof_selinux_status device
 }
 
+# Proposed corrections require independent app visibility, a supported
+# backend, and explicit user approval. The boot auto-apply path skips these
+# high-risk candidates. No wildcard policy is ever created.
+coverage_runtime_path_is_reviewable() {
+	coverage_path_is_safe "$1" || return 1
+	case "$1" in
+		/data/local/tmp/*|/apex/com.android.virt/bin/su) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+coverage_collect_exposure_candidates() {
+	local evidence="$1" output="$2" path type scope configured backend app_state app_uid
+	while IFS="$(printf '\t')" read -r path type scope configured backend app_state app_uid ||
+		[ -n "$path$type$scope$configured$backend$app_state$app_uid" ]; do
+		[ "$app_state" = VISIBLE ] || continue
+		[ "$configured" = not-listed ] || continue
+		coverage_runtime_path_is_reviewable "$path" || continue
+		case "$backend" in
+			loop)
+				coverage_add_candidate "$output" sus_path_loop "$path" app_visible_root_artifact high hide_path device ;;
+			static-only)
+				coverage_add_candidate "$output" sus_path "$path" app_visible_root_artifact high hide_path_static device ;;
+		esac
+	done < "$evidence"
+}
+
 coverage_scan() {
-	local package="${1:-}" operation="${2:-audit}" state_dir="$PERSISTENT_DIR/state" output temp candidates unique kernel_report feature_report
+	local package="${1:-}" operation="${2:-audit}" state_dir="$PERSISTENT_DIR/state" output temp candidates unique exposures kernel_report feature_report
 	local kind target reason risk action scope index candidate_count map_count path_count mount_count spoof_count low_count risky_count missing_total
-	output="${SUSAF_COVERAGE_REPORT:-$state_dir/coverage.report.txt}"; temp="${output}.tmp.$$"; candidates="${output}.candidates.$$"; unique="${output}.unique.$$"; kernel_report="$state_dir/kernel_umount.report.txt"; feature_report="$state_dir/kernel_umount.feature.txt"
+	output="${SUSAF_COVERAGE_REPORT:-$state_dir/coverage.report.txt}"; temp="${output}.tmp.$$"; candidates="${output}.candidates.$$"; unique="${output}.unique.$"; exposures="${output}.exposures.$"; kernel_report="$state_dir/kernel_umount.report.txt"; feature_report="$state_dir/kernel_umount.feature.txt"
 	if [ -n "$package" ] && ! coverage_package_is_safe "$package"; then echo "[x] invalid package name: $package"; return 1; fi
 	COVERAGE_OPERATION="$operation"
 	coverage_progress_write preparing 0 0 running preparing_audit
 	umask 077; mkdir -p "$state_dir" || return 1; chmod 700 "$PERSISTENT_DIR" "$state_dir" 2>/dev/null
-	trap "rm -f '$temp' '$candidates' '$unique' '${candidates}.'*" EXIT HUP INT TERM
+	trap "rm -f '$temp' '$candidates' '$unique' '$exposures' '${candidates}.'*" EXIT HUP INT TERM
 	: > "$candidates"
 	coverage_progress_write artifacts 0 0 running checking_device_artifacts
 	coverage_collect_curated_paths "$candidates"
@@ -336,6 +528,17 @@ coverage_scan() {
 	coverage_collect_mount_namespaces "$package" "$candidates"
 	coverage_progress_write controls 0 0 running checking_supported_controls
 	coverage_collect_controls "$candidates"
+	coverage_progress_write exposure 0 0 running collecting_read_only_evidence
+	if command -v exposure_scan >/dev/null 2>&1; then
+		exposure_scan "$exposures" || return 1
+	else
+		: > "$exposures" || return 1
+	fi
+	coverage_progress_write verifying_app 0 0 running checking_unprivileged_view
+	if command -v probe_verify_file >/dev/null 2>&1; then
+		probe_verify_file "$exposures" || return 1
+	fi
+	coverage_collect_exposure_candidates "$exposures" "$candidates"
 	coverage_progress_write finalizing 0 0 running generating_policy
 	awk -F '\t' '!seen[$1 FS $2]++' "$candidates" > "$unique"
 	missing_total=$(( $(coverage_missing_count "$PERSISTENT_DIR/sus_maps.txt") + $(coverage_missing_count "$PERSISTENT_DIR/sus_paths.txt") + $(coverage_missing_count "$PERSISTENT_DIR/sus_paths_loop.txt") ))
@@ -365,7 +568,7 @@ coverage_scan() {
 		coverage_put schedule.sus_paths "$(coverage_schedule_status "$PERSISTENT_DIR/scripts_postfs.txt" SusAF_apply-sus-paths.sh)"
 		coverage_put schedule.sus_paths_loop "$(coverage_schedule_status "$PERSISTENT_DIR/scripts_postfs.txt" SusAF_apply-sus-paths-loop.sh)"
 		coverage_put candidate.count "$candidate_count"; coverage_put candidate.safe "$low_count"; coverage_put candidate.risky "$risky_count"
-		coverage_put candidate.sus_maps "$map_count"; coverage_put candidate.sus_paths_loop "$path_count"; coverage_put candidate.kernel_umount "$mount_count"; coverage_put candidate.spoof "$spoof_count"
+		coverage_put candidate.sus_maps "$map_count"; coverage_put candidate.sus_paths_loop "$path_count"; coverage_put candidate.sus_paths "$(awk -F '\t' '$1 == "sus_path" { n++ } END { print n+0 }' "$unique")"; coverage_put candidate.kernel_umount "$mount_count"; coverage_put candidate.spoof "$spoof_count"
 		index=0
 		while IFS="$(printf '\t')" read -r kind target reason risk action scope || [ -n "$kind$target$reason$risk$action$scope" ]; do
 			[ -n "$kind" ] && [ -n "$target" ] || continue; index=$((index + 1))
@@ -374,15 +577,29 @@ coverage_scan() {
 		done < "$unique"
 		coverage_put verification.last "$(coverage_property "$state_dir/coverage.verify.txt" result not-run)"
 		coverage_put rollback.available "$([ -f "$state_dir/coverage.last_checkpoint" ] && printf 1 || printf 0)"
+		coverage_put audit.completed 1
+		coverage_put audit.app_visibility not-tested
+		if command -v exposure_emit_report >/dev/null 2>&1; then
+			exposure_emit_report "$exposures"
+		else
+			coverage_put exposure.schema 1
+			coverage_put exposure.count 0
+			coverage_put exposure.result unavailable
+			coverage_put exposure.app_visibility not-tested
+		fi
 		coverage_put limitation.tee_integrity outside_susaf; coverage_put limitation.anonymous_maps requires_injection_backend; coverage_put result ok
 	} > "$temp" || return 1
 	chmod 600 "$temp" 2>/dev/null; mv "$temp" "$output" || return 1
-	trap - EXIT HUP INT TERM; rm -f "$candidates" "$unique" "${candidates}."*; cat "$output"
+	trap - EXIT HUP INT TERM
+	rm -f "$candidates" "$unique" "$exposures" "${candidates}."*
 	if [ "$operation" = verify ]; then
 		coverage_progress_write evaluating 0 0 running evaluating_policy
 	else
 		coverage_progress_write complete 1 1 complete audit_complete
 	fi
+	# stdout is a supported CLI surface. Emit only after the report has been
+	# atomically installed and the progress state has reached its final stage.
+	cat "$output"
 }
 
 coverage_set_config_value() {
@@ -394,7 +611,7 @@ coverage_set_config_value() {
 coverage_checkpoint() {
 	local checkpoint="$1" file name
 	mkdir -p "$checkpoint" || return 1; chmod 700 "$PERSISTENT_DIR/checkpoints" "$checkpoint" 2>/dev/null
-	for name in config.txt kernel_umount.txt sus_maps.txt sus_paths_loop.txt; do
+	for name in config.txt kernel_umount.txt sus_maps.txt sus_paths.txt sus_paths_loop.txt; do
 		file="$PERSISTENT_DIR/$name"
 		if [ -f "$file" ] && [ ! -L "$file" ]; then cp -p "$file" "$checkpoint/$name" || return 1; else : > "$checkpoint/$name.absent"; fi
 	done
@@ -415,6 +632,7 @@ coverage_apply_persistent_features() {
 coverage_apply_runtime() {
 	local result=0
 	if command -v apply_sus_maps >/dev/null 2>&1; then apply_sus_maps || result=1; fi
+	if command -v apply_sus_paths >/dev/null 2>&1; then apply_sus_paths || result=1; fi
 	if command -v apply_sus_paths_loop >/dev/null 2>&1; then apply_sus_paths_loop || result=1; fi
 	if command -v apply_kernel_umount_feature >/dev/null 2>&1; then apply_kernel_umount_feature || result=1; fi
 	if command -v apply_kernel_umount_mounts >/dev/null 2>&1; then apply_kernel_umount_mounts || result=1; fi
@@ -423,27 +641,48 @@ coverage_apply_runtime() {
 	return "$result"
 }
 
+# The saved report must independently match the exact app-visible path
+# and backend claimed by a reviewed candidate. This protects against stale
+# candidates, fabricated IDs, and automatically applying arbitrary paths.
+coverage_report_evidence_visible() {
+	local report="$1" target="$2" backend="$3" total index=1 path observed support
+	total=$(coverage_property "$report" exposure.count 0)
+	case "$total" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$total" -le 128 ] || return 1
+	while [ "$index" -le "$total" ]; do
+		path=$(coverage_property "$report" "exposure.$index.path" "")
+		observed=$(coverage_property "$report" "exposure.$index.app_visibility" "")
+		support=$(coverage_property "$report" "exposure.$index.backend_supported" "")
+		if [ "$path" = "$target" ] && [ "$observed" = visible ] && [ "$support" = "$backend" ]; then
+			return 0
+		fi
+		index=$((index + 1))
+	done
+	return 1
+}
+
 coverage_apply_ids() {
 	local ids="$1" report="${SUSAF_COVERAGE_REPORT:-$PERSISTENT_DIR/state/coverage.report.txt}" stamp checkpoint
-	local config_file mounts_file maps_file paths_file config_temp mounts_temp maps_temp paths_temp provenance provenance_temp
+	local config_file mounts_file maps_file paths_file static_file config_temp mounts_temp maps_temp paths_temp static_temp provenance provenance_temp
 	local id kind target reason risk action selected token old_ifs key value file
-	local added_maps=0 added_paths=0 added_mounts=0 changed_config=0 duplicate_count=0 apply_result=ok
+	local added_maps=0 added_paths=0 added_static_paths=0 added_mounts=0 changed_config=0 duplicate_count=0 apply_result=ok
 	case "$ids" in ''|*[!0-9,]*) echo '[x] invalid candidate selection'; return 1 ;; esac
 	[ -f "$report" ] && [ ! -L "$report" ] || { echo '[x] no trusted Autopilot scan is available'; return 1; }
 	[ "$(coverage_property "$report" schema unknown)" = 2 ] || { echo '[x] unsupported Autopilot report'; return 1; }
 	COVERAGE_OPERATION=apply
 	coverage_progress_write preparing 0 0 running preparing_changes
 	stamp=$(date +%Y%m%d_%H%M%S 2>/dev/null); checkpoint="$PERSISTENT_DIR/checkpoints/coverage-${stamp:-unknown}-$$"
-	config_file="$PERSISTENT_DIR/config.txt"; mounts_file="$PERSISTENT_DIR/kernel_umount.txt"; maps_file="$PERSISTENT_DIR/sus_maps.txt"; paths_file="$PERSISTENT_DIR/sus_paths_loop.txt"
-	config_temp="${config_file}.coverage.$$"; mounts_temp="${mounts_file}.coverage.$$"; maps_temp="${maps_file}.coverage.$$"; paths_temp="${paths_file}.coverage.$$"
+	config_file="$PERSISTENT_DIR/config.txt"; mounts_file="$PERSISTENT_DIR/kernel_umount.txt"; maps_file="$PERSISTENT_DIR/sus_maps.txt"; paths_file="$PERSISTENT_DIR/sus_paths_loop.txt"; static_file="$PERSISTENT_DIR/sus_paths.txt"
+	config_temp="${config_file}.coverage.$$"; mounts_temp="${mounts_file}.coverage.$$"; maps_temp="${maps_file}.coverage.$$"; paths_temp="${paths_file}.coverage.$"; static_temp="${static_file}.coverage.$"
 	provenance="$PERSISTENT_DIR/state/coverage.applied.log"; provenance_temp="${provenance}.tmp.$$"; selected=""
 	umask 077; mkdir -p "$PERSISTENT_DIR" "$PERSISTENT_DIR/state" "$PERSISTENT_DIR/checkpoints" || return 1
-	for file in "$config_file" "$mounts_file" "$maps_file" "$paths_file"; do [ ! -e "$file" ] || { [ -f "$file" ] && [ ! -L "$file" ]; } || return 1; done
+	for file in "$config_file" "$mounts_file" "$maps_file" "$paths_file" "$static_file"; do [ ! -e "$file" ] || { [ -f "$file" ] && [ ! -L "$file" ]; } || return 1; done
 	[ -f "$config_file" ] && cp "$config_file" "$config_temp" || : > "$config_temp"
 	[ -f "$mounts_file" ] && cp "$mounts_file" "$mounts_temp" || : > "$mounts_temp"
 	[ -f "$maps_file" ] && cp "$maps_file" "$maps_temp" || : > "$maps_temp"
 	[ -f "$paths_file" ] && cp "$paths_file" "$paths_temp" || : > "$paths_temp"
-	trap "rm -f '$config_temp' '$mounts_temp' '$maps_temp' '$paths_temp' '$provenance_temp'" EXIT HUP INT TERM
+	[ -f "$static_file" ] && cp "$static_file" "$static_temp" || : > "$static_temp"
+	trap "rm -f '$config_temp' '$mounts_temp' '$maps_temp' '$paths_temp' '$static_temp' '$provenance_temp'" EXIT HUP INT TERM
 	old_ifs=$IFS; IFS=,
 	for token in $ids; do
 		IFS=$old_ifs; case "$token" in ''|*[!0-9]*) return 1 ;; esac
@@ -457,8 +696,21 @@ coverage_apply_ids() {
 				coverage_path_is_safe "$target" && coverage_map_path_is_allowed "$target" && [ -e "$target" ] || return 1
 				coverage_list_contains "$maps_temp" "$target" || { printf '%s\n' "$target" >> "$maps_temp"; added_maps=$((added_maps + 1)); } ;;
 			sus_path_loop:hide_path)
-				coverage_path_is_safe "$target" && coverage_path_is_curated "$target" && [ -e "$target" ] || return 1
+				coverage_path_is_safe "$target" || return 1
+				if [ "$reason" = app_visible_root_artifact ]; then
+					[ "$risk" = high ] && coverage_runtime_path_is_reviewable "$target" &&
+					coverage_report_evidence_visible "$report" "$target" loop || return 1
+				else
+					coverage_path_is_curated "$target" || return 1
+				fi
+				[ -e "$target" ] || [ -L "$target" ] || return 1
 				coverage_list_contains "$paths_temp" "$target" || { printf '%s\n' "$target" >> "$paths_temp"; added_paths=$((added_paths + 1)); } ;;
+			sus_path:hide_path_static)
+				[ "$reason" = app_visible_root_artifact ] && [ "$risk" = high ] &&
+				coverage_runtime_path_is_reviewable "$target" &&
+				coverage_report_evidence_visible "$report" "$target" static-only || return 1
+				[ -e "$target" ] || [ -L "$target" ] || return 1
+				coverage_list_contains "$static_temp" "$target" || { printf '%s\n' "$target" >> "$static_temp"; added_static_paths=$((added_static_paths + 1)); } ;;
 			kernel_umount:hide_mount)
 				coverage_path_is_safe "$target" || return 1
 				coverage_list_contains "$mounts_temp" "$target" || { printf '%s\n' "$target" >> "$mounts_temp"; added_mounts=$((added_mounts + 1)); }
@@ -474,24 +726,24 @@ coverage_apply_ids() {
 		IFS=,
 	done
 	IFS=$old_ifs
-	if [ "$added_maps" -eq 0 ] && [ "$added_paths" -eq 0 ] && [ "$added_mounts" -eq 0 ] && [ "$changed_config" -eq 0 ]; then
+	if [ "$added_maps" -eq 0 ] && [ "$added_paths" -eq 0 ] && [ "$added_static_paths" -eq 0 ] && [ "$added_mounts" -eq 0 ] && [ "$changed_config" -eq 0 ]; then
 		trap - EXIT HUP INT TERM
-		rm -f "$config_temp" "$mounts_temp" "$maps_temp" "$paths_temp" "$provenance_temp"
+		rm -f "$config_temp" "$mounts_temp" "$maps_temp" "$paths_temp" "$static_temp" "$provenance_temp"
 		coverage_progress_write complete 1 1 complete no_changes
 		coverage_put result no-changes; coverage_put duplicates "$duplicate_count"; return 0
 	fi
 	coverage_progress_write checkpoint 0 0 running creating_checkpoint
 	coverage_checkpoint "$checkpoint" || return 1
 	coverage_progress_write policy 0 0 running saving_generated_policy
-	chmod 600 "$config_temp" "$mounts_temp" "$maps_temp" "$paths_temp" 2>/dev/null
-	mv "$config_temp" "$config_file" || return 1; mv "$mounts_temp" "$mounts_file" || return 1; mv "$maps_temp" "$maps_file" || return 1; mv "$paths_temp" "$paths_file" || return 1
+	chmod 600 "$config_temp" "$mounts_temp" "$maps_temp" "$paths_temp" "$static_temp" 2>/dev/null
+	mv "$config_temp" "$config_file" || return 1; mv "$mounts_temp" "$mounts_file" || return 1; mv "$maps_temp" "$maps_file" || return 1; mv "$paths_temp" "$paths_file" || return 1; mv "$static_temp" "$static_file" || return 1
 	printf '%s\n' "$checkpoint" > "$PERSISTENT_DIR/state/coverage.last_checkpoint.tmp.$$"; chmod 600 "$PERSISTENT_DIR/state/coverage.last_checkpoint.tmp.$$" 2>/dev/null; mv "$PERSISTENT_DIR/state/coverage.last_checkpoint.tmp.$$" "$PERSISTENT_DIR/state/coverage.last_checkpoint"
 	coverage_progress_write runtime 0 0 running applying_runtime_policy
 	coverage_apply_runtime || apply_result=partial
 	[ -f "$provenance" ] && [ ! -L "$provenance" ] && cp "$provenance" "$provenance_temp" || : > "$provenance_temp"
 	printf '%s\tids=%s\tmaps=%s\tpaths=%s\tmounts=%s\tconfig=%s\tcheckpoint=%s\tapply=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$selected" "$added_maps" "$added_paths" "$added_mounts" "$changed_config" "$checkpoint" "$apply_result" >> "$provenance_temp"
 	chmod 600 "$provenance_temp" 2>/dev/null; mv "$provenance_temp" "$provenance"; trap - EXIT HUP INT TERM
-	coverage_put result applied; coverage_put runtime.result "$apply_result"; coverage_put added.sus_maps "$added_maps"; coverage_put added.sus_paths_loop "$added_paths"; coverage_put added.kernel_umount "$added_mounts"; coverage_put changed.config "$changed_config"; coverage_put checkpoint "$checkpoint"; coverage_put reboot.required 1
+	coverage_put result applied; coverage_put runtime.result "$apply_result"; coverage_put added.sus_maps "$added_maps"; coverage_put added.sus_paths_loop "$added_paths"; coverage_put added.sus_paths "$added_static_paths"; coverage_put added.kernel_umount "$added_mounts"; coverage_put changed.config "$changed_config"; coverage_put checkpoint "$checkpoint"; coverage_put reboot.required 1
 	coverage_progress_write complete 1 1 complete changes_applied
 	[ "$apply_result" = ok ]
 }
@@ -507,7 +759,7 @@ coverage_apply_safe() {
 }
 
 coverage_verify() {
-	local state_dir="$PERSISTENT_DIR/state" report temp missing mount_failures remaining kernel_mode feature_result mount_result runtime_available=1 result=clean exit_result=0
+	local state_dir="$PERSISTENT_DIR/state" report temp missing mount_failures remaining kernel_mode feature_result mount_result runtime_available=1 result=clean exit_result=0 app_visibility visible_count
 	report="$state_dir/coverage.verify.txt"; temp="${report}.tmp.$$"; coverage_scan '' verify >/dev/null || return 1
 	missing=$(coverage_property "$state_dir/coverage.report.txt" missing.total 0)
 	mount_failures=$(coverage_property "$state_dir/kernel_umount.report.txt" failed 0)
@@ -515,19 +767,22 @@ coverage_verify() {
 	kernel_mode=$(coverage_conf KERNEL_UMOUNT_MODE enabled)
 	feature_result=$(coverage_property "$state_dir/kernel_umount.feature.txt" result not-recorded)
 	mount_result=$(coverage_property "$state_dir/kernel_umount.report.txt" result not-recorded)
+	app_visibility=$(coverage_property "$state_dir/coverage.report.txt" exposure.app_visibility not-tested)
+	visible_count=$(coverage_property "$state_dir/coverage.report.txt" exposure.visible_count 0)
 	case "$missing" in ''|*[!0-9]*) missing=0 ;; esac
 	case "$mount_failures" in ''|*[!0-9]*) mount_failures=0 ;; esac
 	case "$remaining" in ''|*[!0-9]*) remaining=0 ;; esac
 	if [ "$kernel_mode" = enabled ] && { [ "$feature_result" != ok ] || [ "$mount_result" != ok ]; }; then
 		runtime_available=0
 	fi
-	if [ "$runtime_available" -ne 1 ] || [ "$mount_failures" -gt 0 ] || [ "$remaining" -gt 0 ]; then
+	case "$visible_count" in ''|*[!0-9]*) visible_count=0 ;; esac
+	if [ "$runtime_available" -ne 1 ] || [ "$mount_failures" -gt 0 ] || [ "$remaining" -gt 0 ] || [ "$visible_count" -gt 0 ]; then
 		result=attention
 		exit_result=1
 	elif [ "$missing" -gt 0 ]; then
 		result=clean-with-stale
 	fi
-	{ coverage_put schema 1; coverage_put generated.at "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; coverage_put missing.configured "$missing"; coverage_put mount.failures "$mount_failures"; coverage_put remaining.candidates "$remaining"; coverage_put kernel_umount.mode "$kernel_mode"; coverage_put kernel_umount.feature_result "$feature_result"; coverage_put kernel_umount.mount_result "$mount_result"; coverage_put runtime.available "$runtime_available"; coverage_put result "$result"; coverage_put note app_restart_or_reboot_required_for_namespace_verification; } > "$temp" || return 1
+	{ coverage_put schema 1; coverage_put generated.at "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; coverage_put missing.configured "$missing"; coverage_put mount.failures "$mount_failures"; coverage_put remaining.candidates "$remaining"; coverage_put kernel_umount.mode "$kernel_mode"; coverage_put kernel_umount.feature_result "$feature_result"; coverage_put kernel_umount.mount_result "$mount_result"; coverage_put runtime.available "$runtime_available"; coverage_put result "$result"; coverage_put verification.scope configured_rules_and_kernel_umount; coverage_put app_visibility "$app_visibility"; coverage_put observations.visible "$visible_count"; coverage_put observations.count "$(coverage_property "$state_dir/coverage.report.txt" exposure.count 0)"; coverage_put observations.status "$(coverage_property "$state_dir/coverage.report.txt" exposure.result unavailable)"; coverage_put note app_restart_or_reboot_required_for_namespace_verification; } > "$temp" || return 1
 	chmod 600 "$temp" 2>/dev/null; mv "$temp" "$report"
 	coverage_progress_write complete 1 1 "$([ "$exit_result" -eq 0 ] && printf complete || printf attention)" "verification_$result"
 	cat "$report"
@@ -542,7 +797,7 @@ coverage_rollback() {
 	checkpoint=$(sed -n '1p' "$state_file"); case "$checkpoint" in "$PERSISTENT_DIR"/checkpoints/coverage-*) ;; *) return 1 ;; esac
 	[ -d "$checkpoint" ] && [ ! -L "$checkpoint" ] || return 1
 	coverage_progress_write policy 0 0 running restoring_policy
-	for name in config.txt kernel_umount.txt sus_maps.txt sus_paths_loop.txt; do
+	for name in config.txt kernel_umount.txt sus_maps.txt sus_paths.txt sus_paths_loop.txt; do
 		source="$checkpoint/$name"; destination="$PERSISTENT_DIR/$name"
 		if [ -f "$source" ] && [ ! -L "$source" ]; then cp -p "$source" "${destination}.rollback.$$" || return 1; mv "${destination}.rollback.$$" "$destination" || return 1
 		elif [ -f "$checkpoint/$name.absent" ]; then rm -f "$destination"; else return 1; fi

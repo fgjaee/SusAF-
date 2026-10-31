@@ -366,6 +366,102 @@ async function runCoverageCommand(operation, command) {
     return exec(command);
 }
 
+async function getCoverageBackgroundStatus() {
+    const result = await exec(`sh "${moduleDirectory}/SusAF.sh" --coverage-scan-background-status`);
+    if (result.errno !== 0 || !result.stdout.trim()) return null;
+    return parseDiagnostics(result.stdout);
+}
+
+async function waitForCoverageBackground(sequence) {
+    let idleSince = 0;
+    while (sequence === coverageRequestSequence) {
+        await pollCoverageProgress();
+        const status = await getCoverageBackgroundStatus();
+        const progressResult = await exec('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
+        const progress = progressResult.errno === 0 && progressResult.stdout.trim()
+            ? parseDiagnostics(progressResult.stdout) : null;
+
+        if (progress?.operation === 'audit' && progress.status === 'failed') {
+            throw new Error(progress.detail || 'background coverage scan failed');
+        }
+
+        if (progress?.operation === 'audit' && progress.status === 'complete') {
+            const report = await exec('cat "' + basePath + '/state/coverage.report.txt" 2>/dev/null');
+            if (report.errno === 0 && report.stdout.trim()) {
+                const values = parseDiagnostics(report.stdout);
+                const generated = Number.parseInt(values['generated.epoch'] || '0', 10);
+                const updated = Number.parseInt(progress['updated.epoch'] || '0', 10);
+                const sameRun = values.schema === '2'
+                    && values.result === 'ok'
+                    && values['audit.completed'] === '1'
+                    && generated > 0 && updated > 0
+                    && generated <= updated && (updated - generated) <= 120;
+                if (sameRun) return report.stdout;
+            }
+        }
+
+        if (status?.status === 'running') {
+            idleSince = 0;
+        } else {
+            if (!idleSince) idleSince = Date.now();
+            // The worker removes its PID at completion. Give progress/report
+            // state time to settle instead of turning that normal race into
+            // a false red failure in the WebUI.
+            if (Date.now() - idleSince >= 15000) {
+                throw new Error('background audit stopped before committing a current report');
+            }
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 900));
+    }
+    return null;
+}
+
+async function startCoverageBackground(packageName = '') {
+    const command = 'sh "' + moduleDirectory + '/SusAF.sh" --coverage-scan-background'
+        + (packageName ? ' "' + packageName + '"' : '');
+    const result = await exec(command);
+    if (result.errno === 0 && result.stdout.trim()) return parseDiagnostics(result.stdout);
+
+    // The WebUI exec reply can be interrupted when the manager is backgrounded
+    // after the detached worker has already started. Persistent state wins.
+    const status = await getCoverageBackgroundStatus().catch(() => null);
+    const progressResult = await exec('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
+    const progress = progressResult.errno === 0 && progressResult.stdout.trim()
+        ? parseDiagnostics(progressResult.stdout) : null;
+    if (status?.status === 'running'
+        || (progress?.operation === 'audit'
+            && (progress.status === 'running' || progress.status === 'complete'))) {
+        return status || { status: progress.status };
+    }
+    throw new Error(result.stderr || result.stdout || 'could not start background audit');
+}
+
+async function resumeCoverageBackground() {
+    const status = await getCoverageBackgroundStatus();
+    const progressResult = await exec('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
+    const progress = progressResult.errno === 0 && progressResult.stdout.trim()
+        ? parseDiagnostics(progressResult.stdout) : null;
+    if (status?.status !== 'running'
+        && !(progress?.operation === 'audit' && progress.status === 'running')) return;
+
+    const sequence = ++coverageRequestSequence;
+    setCoverageBusy(true);
+    beginCoverageOperation('audit');
+    try {
+        const report = await waitForCoverageBackground(sequence);
+        if (sequence !== coverageRequestSequence || !report) return;
+        renderCoverage(parseDiagnostics(report));
+        await finishCoverageOperation('complete');
+    } catch (error) {
+        if (sequence !== coverageRequestSequence) return;
+        if (coverageOperation) await finishCoverageOperation('failed');
+        setCoverageMessage(getString('coverage_scan_failed'), true);
+        console.warn('Background coverage scan failed:', error);
+    } finally {
+        if (sequence === coverageRequestSequence) setCoverageBusy(false);
+    }
+}
+
 function renderCoverageVerification(values) {
     const panel = document.getElementById('coverage-verification');
     if (!values || values.schema !== '1') {
@@ -385,7 +481,12 @@ function renderCoverageVerification(values) {
     panel.className = 'coverage-verification';
     if (result === 'attention') panel.classList.add('attention');
     if (result === 'clean-with-stale') panel.classList.add('stale');
-    document.getElementById('coverage-verification-title').textContent = getString(`coverage_verify_${result.replaceAll('-', '_')}`);
+    const appVisibility = values.app_visibility || 'not-tested';
+    const visibleCount = Number.parseInt(values['observations.visible'] || '0', 10) || 0;
+    const cleanWithAppCheck = result === 'clean' && appVisibility === 'checked';
+    document.getElementById('coverage-verification-title').textContent = cleanWithAppCheck
+        ? getString('coverage_verify_policy_app_checked')
+        : getString(`coverage_verify_${result.replaceAll('-', '_')}`);
     document.getElementById('coverage-verification-detail').textContent = getString(
         'coverage_verify_detail',
         stale,
@@ -396,9 +497,14 @@ function renderCoverageVerification(values) {
     const featureResult = values['kernel_umount.feature_result'] || 'not-recorded';
     const mountResult = values['kernel_umount.mount_result'] || 'not-recorded';
     runtime.className = 'coverage-verification-runtime';
-    runtime.textContent = values['runtime.available'] === '0'
+    const runtimeMessage = values['runtime.available'] === '0'
         ? getString('coverage_verify_runtime_unavailable', featureResult, mountResult)
         : '';
+    let appMessage = getString('coverage_verify_app_not_tested');
+    if (visibleCount > 0) appMessage = getString('coverage_verify_app_visible', String(visibleCount));
+    else if (appVisibility === 'checked') appMessage = getString('coverage_verify_app_checked');
+    else if (appVisibility === 'partial') appMessage = getString('coverage_verify_app_partial');
+    runtime.textContent = [runtimeMessage, appMessage].filter(Boolean).join(' · ');
     panel.hidden = false;
 }
 
@@ -441,6 +547,59 @@ function selectedCoverageIds() {
         .filter(id => /^\d+$/.test(id));
 }
 
+function renderExposureEvidence(values) {
+    const section = document.getElementById('coverage-evidence');
+    if (!section) return;
+    if (values['exposure.schema'] !== '2') {
+        section.hidden = true;
+        return;
+    }
+    section.hidden = false;
+    const count = Math.min(128, Math.max(0, Number.parseInt(values['exposure.count'] || '0', 10) || 0));
+    const list = document.getElementById('coverage-evidence-list');
+    const empty = document.getElementById('coverage-evidence-empty');
+    const status = document.getElementById('coverage-evidence-status');
+    list.replaceChildren();
+
+    const result = values['exposure.result'] || 'unavailable';
+    const probeStatus = values['exposure.probe_status'] || 'not-run';
+    const probeStatusKey = `coverage_probe_status_${probeStatus.replaceAll('-', '_')}`;
+    const probeStatusText = getString(probeStatusKey);
+    const key = 'coverage_evidence_result_' + result.replaceAll('-', '_');
+    const label = getString(key);
+    status.textContent = getString('coverage_evidence_count', String(count)) +
+        ' · ' + (label === key ? result : label) +
+        ' · ' + (probeStatusText === probeStatusKey ? probeStatus : probeStatusText);
+    const countText = values['exposure.truncated'] === '1'
+        ? getString('coverage_evidence_truncated') : '';
+    if (countText) status.textContent += ' · ' + countText;
+
+    for (let i = 1; i <= count; i++) {
+        const path = values[`exposure.${i}.path`];
+        if (!path) continue;
+        const item = document.createElement('div');
+        item.className = 'coverage-evidence-entry';
+        const name = document.createElement('code');
+        name.textContent = path;
+        const metadata = document.createElement('small');
+        metadata.textContent = getString(
+            'coverage_evidence_metadata',
+            values[`exposure.${i}.type`] || 'unknown',
+            values[`exposure.${i}.scope`] || 'device',
+            values[`exposure.${i}.configured`] || 'not-checked',
+            values[`exposure.${i}.backend_supported`] || 'not-checked'
+        );
+        const verification = document.createElement('small');
+        const state = values[`exposure.${i}.app_visibility`] || 'not-tested';
+        const stateKey = `coverage_evidence_visibility_${state.replaceAll('-', '_')}`;
+        const stateLabel = getString(stateKey);
+        verification.textContent = stateLabel === stateKey ? state : stateLabel;
+        item.append(name, metadata, verification);
+        list.appendChild(item);
+    }
+    empty.hidden = list.childElementCount > 0;
+}
+
 function renderCoverage(values) {
     if (values.schema !== '2') throw new Error('unsupported coverage schema');
     currentCoverage = values;
@@ -459,10 +618,11 @@ function renderCoverage(values) {
             values['mount.high_id_namespaces'] || '0'
         );
     document.getElementById('coverage-map-candidates').textContent = values['candidate.sus_maps'] || '0';
-    document.getElementById('coverage-path-candidates').textContent = values['candidate.sus_paths_loop'] || '0';
+    document.getElementById('coverage-path-candidates').textContent = String(Number(values['candidate.sus_paths_loop'] || 0) + Number(values['candidate.sus_paths'] || 0));
     document.getElementById('coverage-mount-candidates').textContent = values['candidate.kernel_umount'] || '0';
     document.getElementById('coverage-spoof-candidates').textContent = values['candidate.spoof'] || '0';
     document.getElementById('coverage-rollback').disabled = values['rollback.available'] !== '1';
+    renderExposureEvidence(values);
 
     const container = document.getElementById('coverage-candidates');
     const empty = document.getElementById('coverage-empty');
@@ -525,21 +685,27 @@ async function loadCoverage(scan = false, packageName = '') {
     const sequence = ++coverageRequestSequence;
     setCoverageBusy(true);
     setCoverageMessage(scan ? getString('coverage_scanning') : '');
-    const command = scan
-        ? `sh "${moduleDirectory}/SusAF.sh" --coverage-scan${packageName ? ` "${packageName}"` : ''}`
-        : `cat "${basePath}/state/coverage.report.txt"`;
 
     try {
-        const result = scan ? await runCoverageCommand('audit', command) : await exec(command);
-        if (sequence !== coverageRequestSequence) return;
-        if (result.errno !== 0 || !result.stdout.trim()) {
-            if (!scan) {
+        let stdout = '';
+        if (scan) {
+            beginCoverageOperation('audit');
+            await waitForCoveragePaint();
+            await startCoverageBackground(packageName);
+            if (sequence !== coverageRequestSequence) return;
+            stdout = await waitForCoverageBackground(sequence);
+            if (sequence !== coverageRequestSequence || !stdout) return;
+        } else {
+            const result = await exec(`cat "${basePath}/state/coverage.report.txt"`);
+            if (sequence !== coverageRequestSequence) return;
+            if (result.errno !== 0 || !result.stdout.trim()) {
                 setCoverageMessage(getString('coverage_not_scanned'));
                 return;
             }
-            throw new Error(result.stderr || result.stdout || 'coverage scan failed');
+            stdout = result.stdout;
         }
-        renderCoverage(parseDiagnostics(result.stdout));
+
+        renderCoverage(parseDiagnostics(stdout));
         if (scan) {
             await finishCoverageOperation('complete');
             showPrompt(getString('coverage_scan_complete'));
@@ -580,6 +746,7 @@ async function applyCoverageIds(ids) {
     const outcome = parseDiagnostics(result.stdout);
     const added = Number.parseInt(outcome['added.sus_maps'] || '0', 10)
         + Number.parseInt(outcome['added.sus_paths_loop'] || '0', 10)
+        + Number.parseInt(outcome['added.sus_paths'] || '0', 10)
         + Number.parseInt(outcome['added.kernel_umount'] || '0', 10)
         + Number.parseInt(outcome['changed.config'] || '0', 10);
     showPrompt(getString('coverage_applied', added));
@@ -697,7 +864,30 @@ printf '%s\n' "$OUT"
     }
 }
 
+async function installVisibilityProbe() {
+    const dialog = document.getElementById('coverage-probe-install-dialog');
+    dialog.close();
+    setCoverageBusy(true);
+    const apk = `${moduleDirectory}/probe/SusAF-Visibility-Probe.apk`;
+    try {
+        const result = await exec(`pm install -r --user 0 "${apk}"`);
+        if (result.errno !== 0 || !/Success/i.test(result.stdout || '')) {
+            setCoverageMessage(getString('coverage_probe_install_failed'), true);
+            return;
+        }
+        showPrompt(getString('coverage_probe_install_success'));
+        const packageName = currentCoverage?.mode === 'app' && currentCoverage.package !== 'none'
+            ? currentCoverage.package : '';
+        await loadCoverage(true, packageName);
+    } finally {
+        setCoverageBusy(false);
+    }
+}
+
 export function mount() {
+    document.getElementById('coverage-probe-install').onclick = () => document.getElementById('coverage-probe-install-dialog').show();
+    document.getElementById('coverage-probe-install-cancel').onclick = () => document.getElementById('coverage-probe-install-dialog').close();
+    document.getElementById('coverage-probe-install-approve').onclick = () => installVisibilityProbe();
     document.getElementById('diagnostics-refresh').onclick = () => loadDiagnostics(true);
     document.getElementById('diagnostics-export').onclick = () => exportDiagnostics();
     document.getElementById('coverage-system-scan').onclick = () => loadCoverage(true);
@@ -720,8 +910,11 @@ export function mount() {
 export function onShow() {
     updateUIVisibility();
     loadDiagnostics(false);
-    loadCoverage(false);
-    loadCoverageVerification();
+    void (async () => {
+        await loadCoverage(false);
+        await loadCoverageVerification();
+        await resumeCoverageBackground();
+    })();
 }
 
 export function onHide() {

@@ -141,6 +141,37 @@ diagnostics_pidof() {
 	printf '%s\n' "$value"
 }
 
+diagnostics_ksu_default_umount() {
+	file="${SUSAF_KSU_ALLOWLIST:-/data/adb/ksu/.allowlist}"
+	[ -r "$file" ] || { printf 'unavailable\n'; return 0; }
+	magic=$(od -An -tx1 -N4 "$file" 2>/dev/null | tr -d ' \n')
+	version=$(od -An -tu4 -N4 -j4 "$file" 2>/dev/null | tr -d '[:space:]')
+	[ "$magic" = "55534b7f" ] && [ "$version" = "4" ] || { printf 'unknown\n'; return 0; }
+	size=$(wc -c < "$file" 2>/dev/null | tr -d '[:space:]')
+	case "$size" in ''|*[!0-9]*) printf 'unknown\n'; return 0 ;; esac
+	[ "$size" -ge 8 ] || { printf 'unknown\n'; return 0; }
+	rec=784
+	payload=$((size - 8))
+	[ $((payload % rec)) -eq 0 ] || { printf 'unknown\n'; return 0; }
+	count=$((payload / rec))
+	i=0
+	while [ "$i" -lt "$count" ]; do
+		base=$((8 + i * rec))
+		key=$(dd if="$file" bs=1 skip=$((base + 4)) count=256 2>/dev/null | tr -d '\000')
+		if [ "$key" = '$' ]; then
+			value=$(od -An -tu1 -N1 -j$((base + 273)) "$file" 2>/dev/null | tr -d '[:space:]')
+			case "$value" in
+				1) printf 'enabled\n' ;;
+				0) printf 'disabled\n' ;;
+				*) printf 'unknown\n' ;;
+			esac
+			return 0
+		fi
+		i=$((i + 1))
+	done
+	printf 'not-overridden\n'
+}
+
 generate_diagnostics() {
 	local state_dir="$PERSISTENT_DIR/state"
 	local output="${SUSAF_DIAGNOSTICS_FILE:-$state_dir/diagnostics.properties}"
@@ -179,21 +210,36 @@ generate_diagnostics() {
 	features=""
 	feature_count=0
 	if [ -x "$SUSFS_BIN" ]; then
-		susfs_version=$(susfs show version 2>/dev/null) || susfs_version="unavailable"
-		susfs_variant=$(susfs show variant 2>/dev/null) || susfs_variant="unavailable"
-		features=$(susfs show enabled_features 2>/dev/null | awk '
-			NF {
-				gsub(/^[[:space:]]+|[[:space:]]+$/, "")
-				value=value (value == "" ? "" : " | ") $0
+		susfs_version=$(susfs_version_value)
+		susfs_variant=$(susfs_variant_value)
+		features=$(susfs_features | tr ',;' '  ' | awk '{
+			for (i = 1; i <= NF; i++) {
+				token = $i
+				gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
+				if (token ~ /^CONFIG_KSU_SUSFS_[A-Z0-9_]+$/ && !seen[token]++) {
+					value = value (value == "" ? "" : " | ") token
+				}
 			}
-			END { print value }
-		')
-		feature_count=$(susfs show enabled_features 2>/dev/null | awk 'NF { count++ } END { print count + 0 }')
+		} END { print value }')
+		feature_count=$(susfs_features | tr ',;' '  ' | awk '{
+			for (i = 1; i <= NF; i++) {
+				token = $i
+				gsub(/^[,;[:space:]]+|[,;[:space:]]+$/, "", token)
+				if (token ~ /^CONFIG_KSU_SUSFS_[A-Z0-9_]+$/ && !seen[token]++) count++
+			}
+		} END { print count + 0 }')
 		if [ -n "$susfs_version" ] && [ "$susfs_version" != "unavailable" ] && version_ge "$susfs_version" "$SUSFS_MIN_VERSION"; then
 			susfs_status=active
 		else
 			susfs_status=unsupported
 		fi
+	fi
+	# LKM publishes its own control endpoints even when the universal helper
+	# cannot interrogate its version. Report a live transport, not a missing kernel.
+	if [ -r /proc/susfs_path ] && [ -r /proc/susfs_kstat ] && [ -r /proc/susfs_hide_mounts ]; then
+		susfs_status=active
+		susfs_variant=GKI-LKM
+		[ -n "$susfs_version" ] || susfs_version=procfs
 	fi
 	[ -n "$susfs_version" ] || susfs_version=unavailable
 	[ -n "$susfs_variant" ] || susfs_variant=unavailable
@@ -233,7 +279,7 @@ generate_diagnostics() {
 	fi
 	kernel_mode=$(get_conf KERNEL_UMOUNT_MODE enabled "$PERSISTENT_DIR/config.txt")
 	mount_filter_early=$(get_conf HIDE_SUS_MNTS_NON_SU 0 "$PERSISTENT_DIR/config.txt")
-	mount_filter_late=$(get_conf HIDE_SUS_MNTS_LATE 0 "$PERSISTENT_DIR/config.txt")
+	mount_filter_late=$(get_conf HIDE_SUS_MNTS_LATE 1 "$PERSISTENT_DIR/config.txt")
 	allow_broad=$(get_conf ALLOW_BROAD_KERNEL_UMOUNT 0 "$PERSISTENT_DIR/config.txt")
 	mount_result=$(diagnostics_property "$mount_report" result not-recorded)
 	mount_failures=$(diagnostics_property "$mount_report" failed "")
@@ -252,7 +298,7 @@ generate_diagnostics() {
 		[ "$mount_result" = ok ] || overall=degraded
 	fi
 	case "$mount_filter_late" in
-	0) ;;
+	0|1) ;;
 	*) [ "$module_status" = disabled ] || overall=degraded ;;
 	esac
 	case "$allow_broad" in
@@ -300,6 +346,12 @@ generate_diagnostics() {
 		diagnostics_put susfs.variant "$susfs_variant"
 		diagnostics_put susfs.feature_count "$feature_count"
 		diagnostics_put susfs.features "$features"
+		diagnostics_put susfs.capability_source "runtime"
+		if [ -r /proc/susfs_path ] && [ -r /proc/susfs_kstat ] && [ -r /proc/susfs_hide_mounts ]; then
+			diagnostics_put susfs.transport "lkm-procfs"
+		else
+			diagnostics_put susfs.transport "ksu_susfs"
+		fi
 
 		diagnostics_put kernelsu.version "$ksu_version"
 		diagnostics_put kernelsu.binary "${ksu_bin:-unavailable}"
@@ -323,6 +375,13 @@ generate_diagnostics() {
 		diagnostics_put kernel_umount.rejected "$(diagnostics_property "$mount_report" rejected 0)"
 		diagnostics_put kernel_umount.failures "$mount_failures"
 		diagnostics_put kernel_umount.notify "$(diagnostics_property "$mount_report" notify not-recorded)"
+		default_umount=$(diagnostics_ksu_default_umount)
+		diagnostics_put sus_path.default_umount "$default_umount"
+		if [ "$default_umount" = disabled ]; then
+			diagnostics_put sus_path.policy_warning "default-umount-disabled"
+		else
+			diagnostics_put sus_path.policy_warning none
+		fi
 
 		diagnostics_put targets.sus_paths "$(diagnostics_list_count "$PERSISTENT_DIR/sus_paths.txt")"
 		diagnostics_put targets.sus_paths_malformed "$(diagnostics_invalid_count "$PERSISTENT_DIR/sus_paths.txt" path)"
@@ -349,6 +408,10 @@ generate_diagnostics() {
 		diagnostics_put autopilot.safe_candidates "$(diagnostics_property "$coverage_report" candidate.safe 0)"
 		diagnostics_put autopilot.risky_candidates "$(diagnostics_property "$coverage_report" candidate.risky 0)"
 		diagnostics_put autopilot.stale_configured "$(diagnostics_property "$coverage_report" missing.total 0)"
+		diagnostics_put autopilot.exposure_count "$(diagnostics_property "$coverage_report" exposure.count 0)"
+		diagnostics_put autopilot.exposure_status "$(diagnostics_property "$coverage_report" exposure.result not-scanned)"
+		diagnostics_put autopilot.exposure_observer "$(diagnostics_property "$coverage_report" exposure.observer not-recorded)"
+		diagnostics_put autopilot.app_visibility "$(diagnostics_property "$coverage_report" exposure.app_visibility not-tested)"
 		diagnostics_put autopilot.verification_result "$coverage_verify_result"
 		diagnostics_put autopilot.verification_at "$(diagnostics_property "$coverage_verify" generated.at not-recorded)"
 		diagnostics_put autopilot.verification_stale "$(diagnostics_property "$coverage_verify" missing.configured 0)"

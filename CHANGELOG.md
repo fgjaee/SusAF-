@@ -1,5 +1,62 @@
 # Sus'AF Changelog
 
+## v0.1.0-dev.18.1 — 2026-10-31
+
+- Fixes Pixel Android 17 hardening where `adb_enabled`, wireless debugging, `adbd`, or persistent USB configuration could be reasserted after the first write.
+- Hardening now uses staged/retried settings, `svc usb setFunctions`, repeated `adbd` shutdown, and final state verification.
+- `active=1` now means the phone is actually hardened; a saved snapshot with incomplete changes reports `state=partial` instead.
+- Restore now re-enables Developer Options before replaying the saved USB/ADB state.
+
+## v0.1.0-dev.18 — 2026-10-30
+
+- Adds reversible Security Hardening Mode for real Android debugging-surface changes rather than detector spoofing.
+- Enter snapshots Developer Options, USB/wireless ADB settings, adbd state, and USB configuration before changing anything.
+- Hardening Mode disables Developer Options and ADB, stops adbd, and removes only the adb USB token while preserving other USB functions.
+- Restore replays the saved state and archives the snapshot for troubleshooting.
+- Adds UserHub Enter, Status, Restore, and read-only Security Exposure Audit scripts.
+
+
+## v0.1.0-dev.17 — 2026-10-30
+
+- Makes persistent background audit progress/report state authoritative when Module WebUI IPC is interrupted.
+- Adds a 15-second completion grace window so PID cleanup cannot be misreported as an audit failure.
+- Refuses to accept a stale prior report as the result of a newly completed audit.
+- Retries transient ordinary-app verifier provider calls up to three times and records the last failed reply in `state/probe.last_error.txt`.
+
+
+## v0.1.0-dev.16 — 2026-10-30
+
+- Fixes background audits on KernelSU/BakaSU managers whose Module WebUI root shell remains inside the manager app cgroup.
+- When launched from an Android `/apps/` cgroup, the audit worker now re-enters through the ordinary `su` path before detaching so it can escape app freezing/cleanup.
+- Background status now rejects zombie or PID-reused workers instead of trusting `kill -0` alone.
+- The audit overlay now tells users they may leave the screen while the detached audit continues.
+
+
+## v0.1.0-dev.15 — 2026-10-29
+
+- Posts a best-effort Android notification when a detached audit completes or fails.
+- Audit notifications are independent of the WebUI and do not affect the audit result if the system notification channel is unavailable.
+- Added notification coverage to the detached-audit test.
+
+
+## v0.1.0-dev.14 — 2026-10-29
+
+- Runs full and per-app coverage audits as detached background jobs instead of tying their lifetime to the WebUI exec call.
+- The WebUI continues polling the existing coverage progress file while open and reconnects to an audit that is still running when the page is reopened.
+- Added explicit detached-audit status and worker commands; no reboot is required to start or finish an audit.
+
+
+## v0.1.0-dev.13 — 2026-10-29
+
+- Added first-class support for the standalone `susfs_guard_lkm` procfs backend.
+- SusAF can invoke the installed KMI-aware `susfs_lkm_loader` when no SUSFS interface is active.
+- Mapped `add_sus_path_loop` onto the guard's native persistent `/proc/susfs_path` add operation.
+- Replays persistent SUS_PATH rules for late-loaded KernelSU/BakaSU sessions.
+- Reports BakaSU's default non-root `umount_modules` policy when the v4 allowlist format is recognized.
+- Hardened ordinary-app visibility probe parsing for Android `content call` Bundle output.
+- Added guard-loader and procfs compatibility tests.
+
+
 This changelog covers Sus'AF development. Upstream history remains available in
 Git history and the upstream project; it is not repeated here.
 

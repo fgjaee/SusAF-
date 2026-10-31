@@ -6,22 +6,22 @@ MODDIR="$MODULE_DIR"
 USER_SCRIPTS_DIR="$PERSISTENT_DIR/scripts"
 POSTFS_SCRIPTS_FILE="$PERSISTENT_DIR/scripts_postfs.txt"
 BOOTCOMPLETED_SCRIPTS_FILE="$PERSISTENT_DIR/scripts_bootcompleted.txt"
-SUSFS_BIN="${SUSAF_SUSFS_BIN:-$DEST_BIN_DIR/ksu_susfs}"
-[ -n "${SUSAF_SUSFS_BIN:-}" ] || [ -x "$SUSFS_BIN" ] || \
-	[ ! -x "$SUSFS_BUNDLED_BIN" ] || SUSFS_BIN="$SUSFS_BUNDLED_BIN"
 SUSFS_MIN_VERSION="v2.2.0"
 
 . "$MODDIR/utils.sh"
+select_susfs_binary "$SUSFS_MIN_VERSION" || true
 . "$MODDIR/lib/kernel-umount.sh"
 . "$MODDIR/lib/diagnostics.sh"
 . "$MODDIR/lib/backup-restore.sh"
 . "$MODDIR/lib/coverage.sh"
+. "$MODDIR/lib/exposure-audit.sh"
+. "$MODDIR/lib/probe-verify.sh"
+. "$MODDIR/lib/config-control.sh"
+. "$MODDIR/lib/security-hardening.sh"
 
 versionCode=$(grep versionCode $MODDIR/module.prop | sed 's/versionCode=//g' )
 
 [ -n "$WEBUI_QUIET" ] && [ "${NO_BANNER:-0}" = "0" ] && banner
-
-susfs() { "$SUSFS_BIN" "$@"; }
 
 version_ge() {
 	ver1="${1#v}"
@@ -41,6 +41,8 @@ version_ge() {
 	[ "$minor1" -lt "$minor2" ] && return 1
 	[ "$patch1" -ge "$patch2" ]
 }
+
+. "$MODDIR/lib/susfs-capabilities.sh"
 
 [ ! -d "$PERSISTENT_DIR" ] && mkdir -p "$PERSISTENT_DIR"
 
@@ -123,12 +125,20 @@ run_script() {
 	echo "[+] exit code: $?"
 }
 
+susaf_awk() {
+	if command -v busybox >/dev/null 2>&1; then
+		busybox awk "$@"
+	else
+		awk "$@"
+	fi
+}
+
 apply_list() {
 	default="$1"; cmd="$2"; mode="$3"; file="${4:-$default}"
 
 	if [ -f "$file" ]; then
 		tmp="${file}.tmp.$$"
-		busybox awk '
+		susaf_awk '
 			/^[[:space:]]*#/ { print; next }
 			/^[[:space:]]*$/ { next }
 			!seen[$0]++
@@ -137,13 +147,26 @@ apply_list() {
 	fi
 
 	list=$(read_list "$file" 2>/dev/null) || list=
-	[ -z "$list" ] && return
-	echo "$list" | while IFS= read -r p; do
+	[ -z "$list" ] && return 0
+
+	list_tmp="$PERSISTENT_DIR/.apply-list.$$"
+	printf '%s\n' "$list" > "$list_tmp" || return 1
+	status=0
+	while IFS= read -r p || [ -n "$p" ]; do
 		if [ "$mode" = "1" ] && [ ! -e "$p" ]; then echo "[!] skip missing path: $p"; continue; fi
 		if [ "$mode" = "2" ] && [ ! -e "$p" ]; then continue; fi
 		echo "[>] $cmd $p"
-		susfs "$cmd" "$p"
-	done
+		if ! susfs "$cmd" "$p"; then
+			rc=$?
+			# POSIX ! inverts the status, so recover a stable nonzero marker for
+			# the aggregate result while continuing to test remaining entries.
+			[ "$rc" -ne 0 ] || rc=1
+			echo "[x] $cmd failed for: $p"
+			status=1
+		fi
+	done < "$list_tmp"
+	rm -f "$list_tmp"
+	return "$status"
 }
 
 append_to_default() {
@@ -161,7 +184,7 @@ append_to_default() {
 	cat "$src" >> "$default"
 
 	tmp="${default}.tmp.$$"
-	busybox awk '
+	susaf_awk '
 		/^[[:space:]]*#/ { print; next }
 		!seen[$0]++
 	' "$default" > "$tmp" && {
@@ -172,13 +195,22 @@ append_to_default() {
 	echo "[>] appended $src -> $default"
 }
 
-apply_sus_paths() { [ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_paths.txt" "$1" || return 1; }; apply_list "$PERSISTENT_DIR/sus_paths.txt" add_sus_path 1; }
-apply_sus_paths_loop() { [ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_paths_loop.txt" "$1" || return 1; }; apply_list "$PERSISTENT_DIR/sus_paths_loop.txt" add_sus_path_loop 0; }
+apply_sus_paths() {
+	[ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_paths.txt" "$1" || return 1; }
+	susfs_ensure_backend || return 1
+	apply_list "$PERSISTENT_DIR/sus_paths.txt" add_sus_path 1
+}
+apply_sus_paths_loop() {
+	[ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_paths_loop.txt" "$1" || return 1; }
+	susfs_ensure_backend || return 1
+	apply_list "$PERSISTENT_DIR/sus_paths_loop.txt" add_sus_path_loop 0
+}
 apply_sus_paths_loop_direct() {
 	file="$1"
 	[ -n "$file" ] || { echo "[x] no sus path loop file specified"; return 1; }
 	[ -f "$file" ] && [ ! -L "$file" ] || { echo "[x] invalid sus path loop file: $file"; return 1; }
 	[ -r "$file" ] || { echo "[x] sus path loop file not readable: $file"; return 1; }
+	susfs_ensure_backend || return 1
 	apply_list "$file" add_sus_path_loop 0
 }
 apply_sus_maps() { [ -n "$1" ] && { append_to_default "$PERSISTENT_DIR/sus_maps.txt" "$1" || return 1; }; apply_list "$PERSISTENT_DIR/sus_maps.txt" add_sus_map 1; }
@@ -241,8 +273,7 @@ apply_open_redirect() {
 		scheme=$(echo "$line" | awk '{print $3}')
 		[ -z "$target" ] || [ -z "$redirect" ] || [ -z "$scheme" ] && continue
 		[ -e "$target" ] && [ -e "$redirect" ] || { echo "[!] skip: $target -> $redirect (missing endpoint)"; continue; }
-		echo "[>] add_open_redirect $target -> $redirect (scheme $scheme)"
-		susfs add_open_redirect "$target" "$redirect" "$scheme"
+		susfs_add_open_redirect "$target" "$redirect" "$scheme"
 	done
 }
 
@@ -325,12 +356,12 @@ apply_toggles() {
 		avc_spoof=$(get_conf ENABLE_AVC_LOG_SPOOFING "" "$file")
 		;;
 	late)
-		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 0 "$file")
+		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 1 "$file")
 		enable_log=""
 		avc_spoof=""
 		;;
 	current)
-		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 0 "$file")
+		hide_mnts=$(get_conf HIDE_SUS_MNTS_LATE 1 "$file")
 		enable_log=$(get_conf ENABLE_LOG "" "$file")
 		avc_spoof=$(get_conf ENABLE_AVC_LOG_SPOOFING "" "$file")
 		;;
@@ -343,8 +374,8 @@ apply_toggles() {
 	case "$hide_mnts" in
 	"") ;;
 	0|1)
-		echo "[>] hide_sus_mnts_for_non_su_procs $hide_mnts ($stage)"
-		susfs hide_sus_mnts_for_non_su_procs "$hide_mnts" || result=1
+		echo "[*] mount filter policy: $hide_mnts ($stage)"
+		susfs_set_mount_filter "$hide_mnts" || result=1
 		;;
 	*) echo "[x] invalid hide-mounts value: $hide_mnts"; result=1 ;;
 	esac
@@ -363,6 +394,7 @@ apply_toggles() {
 
 stage_early() {
 	echo "[+] stage: early (post-fs-data)"
+	susfs_ensure_backend || echo "[!] SUSFS backend unavailable during early stage"
 	apply_kernel_umount_feature
 	coverage_apply_persistent_features || true
 	apply_kstat_add
@@ -374,8 +406,10 @@ stage_early() {
 
 stage_late() {
 	echo "[+] stage: late (boot-completed)"
+	susfs_ensure_backend || echo "[!] SUSFS backend unavailable during late stage"
 	apply_kernel_umount_feature
 	apply_kernel_umount_mounts
+	susfs_prepare_path_roots || true
 	apply_sus_paths
 	apply_sus_paths_loop
 	apply_sus_maps
@@ -392,6 +426,10 @@ run() {
 action() { run; }
 
 show_status() {
+	if susfs_lkm_active; then
+		show_capabilities
+		return $?
+	fi
 	susfs show version
 	susfs show variant
 	susfs show enabled_features
@@ -405,17 +443,25 @@ show_help () {
 	printf " --stage-early \t\t\t\tpost-fs-data stage only\n"
 	printf " --stage-late \t\t\t\tboot-completed stage only\n"
 	printf " --status \t\t\t\tshow susfs version / variant / enabled features\n"
+	printf " --config-show \t\t\tshow validated persistent controller settings\n"
+	printf " --config-set KEY=VALUE... \tatomically validate and save controller settings\n"
+	printf " --capabilities \t\t\tmachine-readable kernel/binary capability report\n"
 	printf " --force-update \t\t\tinstall the release-pinned, verified SuSFS binary\n"
 	printf " --export-config \t\t\texport a validated Sus'AF configuration archive\n"
 	printf " --restore-config <archive> \t\tstage, validate, and restore a Sus'AF archive\n"
 	printf " --diagnostics \t\t\trefresh and print the private diagnostics snapshot\n"
 	printf " --status-report \t\t\trefresh diagnostics without editing module.prop\n"
 	printf " --coverage-scan [package] \t\tscan exact hiding coverage without changing config\n"
+	printf " --coverage-scan-background [package] \tstart audit as a detached background job\n"
+	printf " --coverage-scan-background-status \tshow detached audit status\n"
 	printf " --coverage-apply <ids> \t\tcheckpoint and save selected scan candidates\n"
 	printf " --coverage-apply-safe \t\tapply all generated low-risk candidates\n"
 	printf " --coverage-verify \t\t\trescan and verify the generated policy\n"
 	printf " --coverage-rollback \t\trestore the last Autopilot checkpoint\n"
 	printf " --autopilot-boot \t\t\tscan and apply safe candidates after boot\n"
+	printf " --hardening-enter \t\t\tenter reversible security hardening mode\n"
+	printf " --hardening-status \t\t\tshow security hardening mode state\n"
+	printf " --hardening-restore \t\t\trestore pre-hardening debugging state\n"
 	printf "\n"
 	printf "if [file] is given it is appended (deduped) into the default list, then applied:\n"
 	printf " --apply-sus-paths [file] \t\tadd_sus_path from list\n"
@@ -445,17 +491,26 @@ case "$1" in
 	--stage-early) stage_early; exit ;;
 	--stage-late) stage_late; exit ;;
 	--status) show_status; exit ;;
+	--config-show) susaf_config_show "$PERSISTENT_DIR/config.txt"; exit ;;
+	--config-set) shift; susaf_config_set "$PERSISTENT_DIR/config.txt" "$@"; exit ;;
+	--capabilities) show_capabilities; exit ;;
 	--force-update) update_susfs; exit ;;
 	--export-config) export_susaf_config; exit ;;
 	--restore-config) restore_susaf_config "$2"; exit ;;
 	--status-report) status_report; exit ;;
 	--diagnostics) show_diagnostics; exit ;;
 	--coverage-scan) coverage_scan "$2"; exit ;;
+	--coverage-scan-background) coverage_scan_background "$2"; exit ;;
+	--coverage-scan-background-status) coverage_scan_background_status; exit ;;
+	--coverage-scan-worker) coverage_scan_worker "$2"; exit ;;
 	--coverage-apply) coverage_apply_ids "$2"; exit ;;
 	--coverage-apply-safe) coverage_apply_safe; exit ;;
 	--coverage-verify) coverage_verify; exit ;;
 	--coverage-rollback) coverage_rollback; exit ;;
 	--autopilot-boot) coverage_autopilot_boot; exit ;;
+	--hardening-enter) hardening_enter; exit ;;
+	--hardening-status) hardening_status; exit ;;
+	--hardening-restore) hardening_restore; exit ;;
 	--apply-sus-paths) apply_sus_paths "$2"; exit ;;
 	--apply-sus-paths-loop) apply_sus_paths_loop "$2"; exit ;;
 	--apply-sus-paths-loop-direct) apply_sus_paths_loop_direct "$2"; exit ;;
