@@ -370,6 +370,34 @@ grep -Fqx 'kernel_umount.mount_result=partial' "$TEST_ROOT/partial.stdout"
 grep -Fqx 'kernel_umount.failures=1' "$TEST_ROOT/partial.stdout"
 mv "$STATE_DIR/kernel_umount.report.saved" "$STATE_DIR/kernel_umount.report.txt"
 
+# A newer probe showing configured root paths visible must override an old
+# clean verification and degrade the module's overall diagnostics.
+cat >> "$STATE_DIR/coverage.report.txt" <<'EOF'
+generated.epoch=1793910000
+exposure.visible_count=7
+exposure.configured_visible_count=7
+exposure.policy_action=review-configured-paths
+EOF
+SUSAF_MODULE_DIR="$MODULE_DIR" \
+SUSAF_PERSISTENT_DIR="$PERSISTENT_DIR" \
+SUSAF_LEGACY_RESUSFS_DIR="$TEST_ROOT/no-resusfs" \
+SUSAF_LEGACY_SUSFS4KSU_DIR="$TEST_ROOT/no-susfs4ksu" \
+SUSAF_SUSFS_BIN="$BIN_DIR/ksu_susfs" \
+SUSAF_KSUD_BIN="$BIN_DIR/ksud" \
+SUSAF_SETTINGS_BIN="$BIN_DIR/settings" \
+SUSAF_GETPROP_BIN="$BIN_DIR/getprop" \
+SUSAF_PIDOF_BIN="$BIN_DIR/pidof" \
+SUSAF_MOUNTINFO="$TEST_ROOT/mountinfo" \
+SUSAF_BOOTCONFIG_SOURCE="$TEST_ROOT/bootconfig" \
+SUSAF_PROC_VERSION="$TEST_ROOT/proc-version" \
+sh "$MODULE_DIR/SusAF.sh" --diagnostics > "$TEST_ROOT/stale-exposure.stdout"
+grep -Fqx 'overall.status=degraded' "$TEST_ROOT/stale-exposure.stdout"
+grep -Fqx 'autopilot.exposure_visible_count=7' "$TEST_ROOT/stale-exposure.stdout"
+grep -Fqx 'autopilot.configured_visible_count=7' "$TEST_ROOT/stale-exposure.stdout"
+grep -Fqx 'autopilot.exposure_policy_action=review-configured-paths' "$TEST_ROOT/stale-exposure.stdout"
+grep -Fqx 'autopilot.verification_result=outdated' "$TEST_ROOT/stale-exposure.stdout"
+grep -Fqx 'autopilot.verification_freshness=outdated' "$TEST_ROOT/stale-exposure.stdout"
+
 . "$MODULE_DIR/lib/stage-state.sh"
 stage_state_begin test-stage
 stage_state_finish test-stage 7
