@@ -1,3 +1,11 @@
+## v0.1.0-dev.18.2 (development)
+
+- Diagnose configured SUS_PATH rules still visible to the unprivileged probe instead of silently reporting zero candidates.
+- Mark previous verification outdated when a newer audit is available; degrade diagnostics for app-visible root paths.
+- Distinguish optional script schedules from direct late-stage path application and runtime replay.
+- Correct LKM procfs path capability reporting: `add_sus_path_loop` uses a one-shot procfs registration rather than guaranteed future-path looping.
+- Keep exposure audits read-only; continue requiring explicit review before touching sensitive live root paths.
+
 # Sus'AF Changelog
 
 ## v0.1.0-dev.18.1 — 2026-10-31
