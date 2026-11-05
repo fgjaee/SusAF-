@@ -96,12 +96,19 @@ exposure_scan() {
 
 exposure_emit_report() {
     local file="$1" count index=0 path type scope configured backend app_state app_uid
-    local visible missing denied errors checked=0 verification=not-tested overall=not-tested
+    local visible missing denied errors configured_visible unconfigured_visible checked=0 verification=not-tested overall=not-tested policy_action=none
     count=$(awk 'END { print NR + 0 }' "$file")
     visible=$(awk -F '\t' '$6=="VISIBLE" { n++ } END { print n+0 }' "$file")
     missing=$(awk -F '\t' '$6=="MISSING" { n++ } END { print n+0 }' "$file")
     denied=$(awk -F '\t' '$6=="DENIED" { n++ } END { print n+0 }' "$file")
     errors=$(awk -F '\t' '$6=="ERROR" || $6=="INVALID" { n++ } END { print n+0 }' "$file")
+    configured_visible=$(awk -F '\t' '$6=="VISIBLE" && ($4=="listed-loop" || $4=="listed-static") { n++ } END { print n+0 }' "$file")
+    unconfigured_visible=$(awk -F '\t' '$6=="VISIBLE" && $4=="not-listed" { n++ } END { print n+0 }' "$file")
+    if [ "$configured_visible" -gt 0 ]; then
+        policy_action=review-configured-paths
+    elif [ "$unconfigured_visible" -gt 0 ]; then
+        policy_action=review-new-paths
+    fi
     checked=$((visible + missing + denied + errors))
     if [ "$checked" -gt 0 ]; then
         if [ "$checked" -eq "$count" ] && [ "$errors" -eq 0 ]; then
@@ -121,10 +128,12 @@ exposure_emit_report() {
     coverage_put exposure.probe_status "${PROBE_STATUS:-not-run}"
     coverage_put exposure.probe_uid "${PROBE_UID:-0}"
     coverage_put exposure.visible_count "$visible"
+    coverage_put exposure.configured_visible_count "$configured_visible"
+    coverage_put exposure.unconfigured_visible_count "$unconfigured_visible"
     coverage_put exposure.missing_count "$missing"
     coverage_put exposure.denied_count "$denied"
     coverage_put exposure.error_count "$errors"
-    coverage_put exposure.policy_action none
+    coverage_put exposure.policy_action "$policy_action"
     if [ "$EXPOSURE_TMP_CHECK" != checked ] ||
         { [ "$EXPOSURE_APEX_CHECK" != checked ] && [ "$EXPOSURE_APEX_CHECK" != absent ]; } ||
         [ "$EXPOSURE_TRUNCATED" = 1 ]; then
@@ -155,7 +164,16 @@ exposure_emit_report() {
         coverage_put "exposure.$index.scope" "$scope"
         coverage_put "exposure.$index.configured" "$configured"
         coverage_put "exposure.$index.backend_supported" "$backend"
+        # Auditing does not apply a kernel rule. Distinguish an existing rule
+        # that failed an app-side visibility check from an undiscovered path.
+        case "$app_state:$configured" in
+            visible:listed-loop|visible:listed-static) coverage_status=configured-but-visible ;;
+            visible:not-listed) coverage_status=unconfigured-visible ;;
+            not-found:*|permission-denied:*) coverage_status=not-visible-to-probe ;;
+            *) coverage_status=unverified ;;
+        esac
         coverage_put "exposure.$index.operation_result" not-attempted
+        coverage_put "exposure.$index.coverage_status" "$coverage_status"
         coverage_put "exposure.$index.app_visibility" "$app_state"
         coverage_put "exposure.$index.verification_method" "$([ "$app_state" != not-tested ] && printf companion-contentprovider || printf none)"
         coverage_put "exposure.$index.probe_uid" "${app_uid:-0}"
