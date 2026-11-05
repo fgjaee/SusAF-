@@ -80,6 +80,13 @@ susfs_has_command() { [ "$1" = add_sus_path ]; }
 susfs_has_command() { return 1; }
 [ "$(exposure_backend)" = unsupported ]
 
+# The LKM maps add_sus_path_loop to a one-shot procfs write.
+# Do not present that as a true future-path/loop backend.
+susfs_has_command() { [ "$1" = add_sus_path ] || [ "$1" = add_sus_path_loop ]; }
+susfs_lkm_active() { return 0; }
+[ "$(exposure_backend)" = static-only ]
+susfs_lkm_active() { return 1; }
+
 # Truncation must be visible rather than silently calling the audit complete.
 SUSAF_EXPOSURE_MAX_ITEMS=1
 exposure_scan "$evidence"
