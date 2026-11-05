@@ -195,7 +195,7 @@ generate_diagnostics() {
 	local features feature_count ksu_bin ksu_check ksu_current ksu_version kernel_mode
 	local selinux_check selinux_current mount_filter_early mount_filter_late allow_broad mount_result mount_failures
 	local persistent_owner persistent_mode proc_version uname_release uname_version
-	local coverage_verify_result
+	local coverage_verify_result coverage_verify_freshness coverage_audit_epoch coverage_verify_epoch coverage_visible_count coverage_configured_visible_count
 
 	umask 077
 	mkdir -p "$state_dir" || return 1
@@ -305,8 +305,30 @@ generate_diagnostics() {
 	0) ;;
 	*) [ "$module_status" = disabled ] || overall=degraded ;;
 	esac
+
 	coverage_verify_result=$(diagnostics_property "$coverage_verify" result not-run)
-	[ "$coverage_verify_result" != attention ] || [ "$module_status" = disabled ] || overall=degraded
+	coverage_verify_freshness=unknown
+	coverage_audit_epoch=$(diagnostics_property "$coverage_report" generated.epoch 0)
+	coverage_verify_epoch=$(diagnostics_property "$coverage_verify" generated.epoch 0)
+	coverage_visible_count=$(diagnostics_property "$coverage_report" exposure.visible_count 0)
+	coverage_configured_visible_count=$(diagnostics_property "$coverage_report" exposure.configured_visible_count 0)
+	case "$coverage_audit_epoch:$coverage_verify_epoch" in *[!0-9:]*|'') coverage_audit_epoch=0; coverage_verify_epoch=0 ;; esac
+	if [ "$coverage_audit_epoch" -gt 0 ]; then
+		if [ "$coverage_verify_epoch" -lt "$coverage_audit_epoch" ]; then
+			coverage_verify_freshness=outdated
+			coverage_verify_result=outdated
+		else
+			coverage_verify_freshness=current
+		fi
+	fi
+	case "$coverage_visible_count" in ''|*[!0-9]*) coverage_visible_count=0 ;; esac
+	case "$coverage_configured_visible_count" in ''|*[!0-9]*) coverage_configured_visible_count=0 ;; esac
+	# A prior successful verification must not override a newer app-side probe.
+	if [ "$module_status" != disabled ]; then
+		[ "$coverage_visible_count" -eq 0 ] || overall=degraded
+		[ "$coverage_configured_visible_count" -eq 0 ] || overall=degraded
+		[ "$coverage_verify_result" != attention ] || overall=degraded
+	fi
 
 	: > "$candidates"
 	collect_kernel_umount_candidates "$mountinfo_file" "$candidates" 2>/dev/null || : > "$candidates"
@@ -409,10 +431,14 @@ generate_diagnostics() {
 		diagnostics_put autopilot.risky_candidates "$(diagnostics_property "$coverage_report" candidate.risky 0)"
 		diagnostics_put autopilot.stale_configured "$(diagnostics_property "$coverage_report" missing.total 0)"
 		diagnostics_put autopilot.exposure_count "$(diagnostics_property "$coverage_report" exposure.count 0)"
+		diagnostics_put autopilot.exposure_visible_count "$coverage_visible_count"
+		diagnostics_put autopilot.configured_visible_count "$coverage_configured_visible_count"
+		diagnostics_put autopilot.exposure_policy_action "$(diagnostics_property "$coverage_report" exposure.policy_action none)"
 		diagnostics_put autopilot.exposure_status "$(diagnostics_property "$coverage_report" exposure.result not-scanned)"
 		diagnostics_put autopilot.exposure_observer "$(diagnostics_property "$coverage_report" exposure.observer not-recorded)"
 		diagnostics_put autopilot.app_visibility "$(diagnostics_property "$coverage_report" exposure.app_visibility not-tested)"
 		diagnostics_put autopilot.verification_result "$coverage_verify_result"
+		diagnostics_put autopilot.verification_freshness "$coverage_verify_freshness"
 		diagnostics_put autopilot.verification_at "$(diagnostics_property "$coverage_verify" generated.at not-recorded)"
 		diagnostics_put autopilot.verification_stale "$(diagnostics_property "$coverage_verify" missing.configured 0)"
 		diagnostics_put autopilot.verification_mount_failures "$(diagnostics_property "$coverage_verify" mount.failures 0)"
