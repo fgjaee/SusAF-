@@ -567,6 +567,9 @@ coverage_scan() {
 		coverage_put schedule.sus_maps "$(coverage_schedule_status "$PERSISTENT_DIR/scripts_postfs.txt" SusAF_apply-sus-maps.sh)"
 		coverage_put schedule.sus_paths "$(coverage_schedule_status "$PERSISTENT_DIR/scripts_postfs.txt" SusAF_apply-sus-paths.sh)"
 		coverage_put schedule.sus_paths_loop "$(coverage_schedule_status "$PERSISTENT_DIR/scripts_postfs.txt" SusAF_apply-sus-paths-loop.sh)"
+		# These are optional user-script schedules. The core module also applies
+		# paths directly during stage_late and replays them after late root load.
+		coverage_put runtime.path_application stage-late-and-service-replay
 		coverage_put candidate.count "$candidate_count"; coverage_put candidate.safe "$low_count"; coverage_put candidate.risky "$risky_count"
 		coverage_put candidate.sus_maps "$map_count"; coverage_put candidate.sus_paths_loop "$path_count"; coverage_put candidate.sus_paths "$(awk -F '\t' '$1 == "sus_path" { n++ } END { print n+0 }' "$unique")"; coverage_put candidate.kernel_umount "$mount_count"; coverage_put candidate.spoof "$spoof_count"
 		index=0
@@ -782,7 +785,7 @@ coverage_verify() {
 	elif [ "$missing" -gt 0 ]; then
 		result=clean-with-stale
 	fi
-	{ coverage_put schema 1; coverage_put generated.at "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; coverage_put missing.configured "$missing"; coverage_put mount.failures "$mount_failures"; coverage_put remaining.candidates "$remaining"; coverage_put kernel_umount.mode "$kernel_mode"; coverage_put kernel_umount.feature_result "$feature_result"; coverage_put kernel_umount.mount_result "$mount_result"; coverage_put runtime.available "$runtime_available"; coverage_put result "$result"; coverage_put verification.scope configured_rules_and_kernel_umount; coverage_put app_visibility "$app_visibility"; coverage_put observations.visible "$visible_count"; coverage_put observations.count "$(coverage_property "$state_dir/coverage.report.txt" exposure.count 0)"; coverage_put observations.status "$(coverage_property "$state_dir/coverage.report.txt" exposure.result unavailable)"; coverage_put note app_restart_or_reboot_required_for_namespace_verification; } > "$temp" || return 1
+	{ coverage_put schema 1; coverage_put generated.at "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; coverage_put generated.epoch "$(date +%s 2>/dev/null)"; coverage_put missing.configured "$missing"; coverage_put mount.failures "$mount_failures"; coverage_put remaining.candidates "$remaining"; coverage_put kernel_umount.mode "$kernel_mode"; coverage_put kernel_umount.feature_result "$feature_result"; coverage_put kernel_umount.mount_result "$mount_result"; coverage_put runtime.available "$runtime_available"; coverage_put result "$result"; coverage_put verification.scope configured_rules_and_kernel_umount; coverage_put app_visibility "$app_visibility"; coverage_put observations.visible "$visible_count"; coverage_put observations.count "$(coverage_property "$state_dir/coverage.report.txt" exposure.count 0)"; coverage_put observations.status "$(coverage_property "$state_dir/coverage.report.txt" exposure.result unavailable)"; coverage_put note app_restart_or_reboot_required_for_namespace_verification; } > "$temp" || return 1
 	chmod 600 "$temp" 2>/dev/null; mv "$temp" "$report"
 	coverage_progress_write complete 1 1 "$([ "$exit_result" -eq 0 ] && printf complete || printf attention)" "verification_$result"
 	cat "$report"
