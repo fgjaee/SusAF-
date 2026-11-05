@@ -13,6 +13,18 @@ exposure_object_type() {
 }
 
 exposure_backend() {
+    # The GKI-LKM procfs adapter maps add_sus_path_loop to the same
+    # one-shot 'add <path>' write as add_sus_path. It cannot promise
+    # future-path loop semantics simply because the command is accepted.
+    if command -v susfs_lkm_active >/dev/null 2>&1 && susfs_lkm_active; then
+        if command -v susfs_has_command >/dev/null 2>&1 &&
+            susfs_has_command add_sus_path; then
+            printf 'static-only\n'
+        else
+            printf 'unsupported\n'
+        fi
+        return
+    fi
     if command -v susfs_has_command >/dev/null 2>&1; then
         if susfs_has_command add_sus_path_loop; then printf 'loop\n'; return; fi
         if susfs_has_command add_sus_path; then printf 'static-only\n'; return; fi
