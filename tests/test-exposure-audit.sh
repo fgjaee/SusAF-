@@ -57,6 +57,18 @@ if printf '%s\n' "$output" | grep -Fq "$TEST_ROOT/tmp/readme.txt"; then
     exit 1
 fi
 
+# A configured path that remains visible is failed coverage, not zero work.
+# An unconfigured visible path is a separately reviewed recommendation.
+printf '%s\tfile\ttemp-root\tlisted-loop\tloop\tVISIBLE\t10739\n' "$TEST_ROOT/tmp/ksud" > "$evidence"
+printf '%s\tsymlink\ttemp-root\tnot-listed\tloop\tVISIBLE\t10739\n' "$TEST_ROOT/tmp/ghostlock_su" >> "$evidence"
+visible_report=$(exposure_emit_report "$evidence")
+printf '%s\n' "$visible_report" | grep -Fqx 'exposure.configured_visible_count=1'
+printf '%s\n' "$visible_report" | grep -Fqx 'exposure.unconfigured_visible_count=1'
+printf '%s\n' "$visible_report" | grep -Fqx 'exposure.policy_action=review-configured-paths'
+printf '%s\n' "$visible_report" | grep -Fqx 'exposure.1.coverage_status=configured-but-visible'
+printf '%s\n' "$visible_report" | grep -Fqx 'exposure.2.coverage_status=unconfigured-visible'
+printf '%s\n' "$visible_report" | grep -Fqx 'exposure.1.operation_result=not-attempted'
+
 # Non-mutating: the discovery phase must leave all fixtures untouched.
 [ -e "$TEST_ROOT/tmp/ksud" ]
 [ -S "$TEST_ROOT/tmp/temp_su.sock" ]
