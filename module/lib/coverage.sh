@@ -570,6 +570,11 @@ coverage_scan() {
 		# These are optional user-script schedules. The core module also applies
 		# paths directly during stage_late and replays them after late root load.
 		coverage_put runtime.path_application stage-late-and-service-replay
+		if command -v susfs_lkm_active >/dev/null 2>&1 && susfs_lkm_active; then
+			coverage_put runtime.path_backend static-only-lkm-procfs
+		else
+			coverage_put runtime.path_backend helper-dependent
+		fi
 		coverage_put candidate.count "$candidate_count"; coverage_put candidate.safe "$low_count"; coverage_put candidate.risky "$risky_count"
 		coverage_put candidate.sus_maps "$map_count"; coverage_put candidate.sus_paths_loop "$path_count"; coverage_put candidate.sus_paths "$(awk -F '\t' '$1 == "sus_path" { n++ } END { print n+0 }' "$unique")"; coverage_put candidate.kernel_umount "$mount_count"; coverage_put candidate.spoof "$spoof_count"
 		index=0
