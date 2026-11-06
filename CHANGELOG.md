@@ -1,3 +1,9 @@
+## v0.1.0-dev.18.3 (development)
+
+- Add explicit `--coverage-repair-visible` command: fresh unprivileged probe, bounded retry of already-configured root artifact paths, fresh probe, and per-path verification.
+- Preserve persistent configuration; never register previously unapproved root paths or silently mutate live root state at boot.
+- Report kernel-registration acceptance separately from actual app-side visibility, including ineffective rules.
+
 ## v0.1.0-dev.18.2 (development)
 
 - Diagnose configured SUS_PATH rules still visible to the unprivileged probe instead of silently reporting zero candidates.
