@@ -14,6 +14,7 @@ select_susfs_binary "$SUSFS_MIN_VERSION" || true
 . "$MODDIR/lib/diagnostics.sh"
 . "$MODDIR/lib/backup-restore.sh"
 . "$MODDIR/lib/coverage.sh"
+. "$MODDIR/lib/repair-visible.sh"
 . "$MODDIR/lib/exposure-audit.sh"
 . "$MODDIR/lib/probe-verify.sh"
 . "$MODDIR/lib/config-control.sh"
@@ -457,6 +458,7 @@ show_help () {
 	printf " --coverage-apply <ids> \t\tcheckpoint and save selected scan candidates\n"
 	printf " --coverage-apply-safe \t\tapply all generated low-risk candidates\n"
 	printf " --coverage-verify \t\t\trescan and verify the generated policy\n"
+	printf " --coverage-repair-visible \t\tmanual retry of app-visible configured paths; then re-probe\n"
 	printf " --coverage-rollback \t\trestore the last Autopilot checkpoint\n"
 	printf " --autopilot-boot \t\t\tscan and apply safe candidates after boot\n"
 	printf " --hardening-enter \t\t\tenter reversible security hardening mode\n"
@@ -506,6 +508,7 @@ case "$1" in
 	--coverage-apply) coverage_apply_ids "$2"; exit ;;
 	--coverage-apply-safe) coverage_apply_safe; exit ;;
 	--coverage-verify) coverage_verify; exit ;;
+	--coverage-repair-visible) coverage_repair_visible; exit ;;
 	--coverage-rollback) coverage_rollback; exit ;;
 	--autopilot-boot) coverage_autopilot_boot; exit ;;
 	--hardening-enter) hardening_enter; exit ;;
