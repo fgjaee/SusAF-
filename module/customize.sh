@@ -49,12 +49,23 @@ repair_oversized_cmdline_bootconfig "$CONFIG_DIR/cmdline_or_bootconfig.txt" || e
 
 rm -rf "$CONFIG_DIR"
 
-[ -f "$MODPATH/bin/ksu_susfs" ] && [ ! -L "$MODPATH/bin/ksu_susfs" ] || {
-	ui_print "[!] The bundled ksu_susfs binary is missing or unsafe"
-	exit 1
-}
-chmod 755 "$MODPATH/bin/ksu_susfs" || exit 1
-update_susfs || exit 1
+# An active GKI-LKM exposes procfs controls without requiring the
+# integrated-kernel helper ABI. Never replace an LKM's helper or loader as
+# a side effect of installing the Sus'AF controller.
+if [ -r /proc/susfs_path ] && [ -r /proc/susfs_kstat ] && [ -r /proc/susfs_hide_mounts ]; then
+	ui_print "[+] Active SUSFS LKM detected: using its existing procfs interface"
+	if [ -f "$MODPATH/bin/ksu_susfs" ] && [ ! -L "$MODPATH/bin/ksu_susfs" ]; then
+		chmod 755 "$MODPATH/bin/ksu_susfs" || exit 1
+	fi
+	ui_print "[*] Skipping integrated-SUSFS helper updater on LKM"
+else
+	[ -f "$MODPATH/bin/ksu_susfs" ] && [ ! -L "$MODPATH/bin/ksu_susfs" ] || {
+		ui_print "[!] The bundled ksu_susfs binary is missing or unsafe"
+		exit 1
+	}
+	chmod 755 "$MODPATH/bin/ksu_susfs" || exit 1
+	update_susfs || exit 1
+fi
 
 chmod 755 "$MODPATH/SusAF.sh" "$MODPATH/ReSuSFS.sh"
 chmod 644 "$MODPATH/post-fs-data.sh" "$MODPATH/service.sh" "$MODPATH/uninstall.sh" 2>/dev/null

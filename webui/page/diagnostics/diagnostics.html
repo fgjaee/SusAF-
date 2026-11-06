@@ -81,6 +81,17 @@
                     </div>
                 </div>
 
+                <section class="coverage-evidence-section" id="coverage-evidence" hidden aria-label="Root-side observations">
+                    <h4 data-i18n="coverage_evidence_title"></h4>
+                    <p data-i18n="coverage_evidence_detail"></p>
+                    <div class="coverage-scan-actions">
+                        <md-filled-tonal-button id="coverage-probe-install" data-i18n="coverage_probe_install"></md-filled-tonal-button>
+                    </div>
+                    <p class="coverage-evidence-status" id="coverage-evidence-status"></p>
+                    <div class="coverage-evidence-list" id="coverage-evidence-list"></div>
+                    <p class="coverage-evidence-empty" id="coverage-evidence-empty" data-i18n="coverage_evidence_empty" hidden></p>
+                </section>
+
                 <div class="coverage-candidate-section">
                     <div class="coverage-candidate-heading">
                         <h4 data-i18n="coverage_exact_candidates"></h4>
@@ -98,6 +109,18 @@
                 <p class="coverage-limits" data-i18n="coverage_limits"></p>
             </div>
         </div>
+
+        <md-dialog id="coverage-probe-install-dialog">
+            <div slot="headline" data-i18n="coverage_probe_install_title"></div>
+            <div slot="content">
+                <p data-i18n="coverage_probe_install_detail"></p>
+                <p data-i18n="coverage_probe_install_safety"></p>
+            </div>
+            <div slot="actions">
+                <md-text-button id="coverage-probe-install-cancel" data-i18n="global_cancel"></md-text-button>
+                <md-filled-button id="coverage-probe-install-approve" data-i18n="coverage_probe_install_confirm"></md-filled-button>
+            </div>
+        </md-dialog>
 
         <md-dialog id="coverage-risk-dialog">
             <div slot="headline" data-i18n="coverage_risk_title"></div>

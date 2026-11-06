@@ -683,3 +683,46 @@
         animation-duration: 2.4s;
     }
 }
+
+/* Read-only root-observed evidence is kept visually distinct from selectable
+   kernel-policy candidates. No action control belongs in this section. */
+.coverage-evidence-section {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin: 12px 16px;
+    padding: 12px;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: 14px;
+}
+.coverage-evidence-section[hidden] {
+    display: none;
+}
+.coverage-evidence-section h4,
+.coverage-evidence-section p {
+    margin: 0;
+}
+.coverage-evidence-section p,
+.coverage-evidence-entry small {
+    font-size: 0.82em;
+    line-height: 1.4;
+    color: var(--md-sys-color-on-surface-variant);
+}
+.coverage-evidence-list {
+    display: grid;
+    gap: 8px;
+}
+.coverage-evidence-entry {
+    display: grid;
+    gap: 5px;
+    padding: 10px;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: 10px;
+}
+.coverage-evidence-entry code {
+    overflow-wrap: anywhere;
+    font-size: 0.82em;
+}
+.coverage-evidence-empty[hidden] {
+    display: none;
+}

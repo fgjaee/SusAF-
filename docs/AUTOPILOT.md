@@ -4,10 +4,9 @@ Sus'AF Autopilot turns live device evidence into an editable SuSFS/KernelSU
 policy. It is designed for users who should not have to know every `SUS_MAP`,
 `SUS_PATH`, or `kernel_umount` target in advance.
 
-Autopilot is one of the main reasons Sus'AF is more than a renamed ReSuSFS
-fork. ReSuSFS remains the credited foundation, while the audit engine, policy
-schema, risk model, application transaction, verification, and rollback flow
-are maintained as Sus'AF features.
+Autopilot is a Sus'AF-owned audit, policy, risk, application, verification, and
+rollback layer. It is intentionally capability-aware rather than a static list
+of paths copied from another module.
 
 ## Boot behavior
 
@@ -50,8 +49,32 @@ mapped files beneath approved module/root-manager roots. Filesystem-artifact
 candidates must exist and belong to the curated catalog. Mount candidates must
 come from the validated live mount collector.
 
-The optional **Focused app audit** applies the same checks to a validated
-package name when one app needs to be isolated.
+The optional **Focused app audit** applies the process/mount checks to a
+validated package name; root-side filesystem observations remain device-wide
+and must **not** be interpreted as exposure specifically to that app.
+
+### Read-only runtime evidence (2026-10-28)
+
+Audit now separately checks direct entries beneath `/data/local/tmp` with
+bounded enumeration (64 matching paths by default), plus the exact optional
+`/apex/com.android.virt/bin/su` path. It recognizes file/symlink/socket
+types and names associated with root runtimes. No file contents or socket
+payloads are opened. Missing/unavailable scan locations and truncation are
+reported explicitly.
+
+These are **observations**, not automatic corrections. When the independently installed app probe confirms a path is visible to its unprivileged Android UID, and the active backend can apply a matching rule, Sus’AF also offers that exact path as a **high-risk, review-required candidate**. No such candidate is auto-applied. For each
+observation, the report records its path, type, configuration-list status,
+backend support class (`loop`, `static-only`, `unsupported`, or
+`not-checked`), and the deliberately explicit results
+`operation_result=not-attempted`, `app_visibility=not-tested` until the app is installed, and
+`verification_method=none` or `companion-contentprovider`. A root-shell observation does not prove the
+same path is visible from an unprivileged app. The scanner never registers hiding rules automatically; proposed app-visible corrections require explicit risk review and use the existing checkpoint/rollback workflow. Full details: [Full Visibility Audit](APP_VISIBILITY_PROBE.md).
+
+The WebUI shows these findings in a separate read-only section. The scan
+report remains private under `/data/adb/SusAF/state/coverage.report.txt`.
+The scan's `result=ok` means execution completed, **not** that the device
+passed a detector or Google Play Integrity. The supported correction list
+and all existing Autopilot apply/rollback behavior remain unchanged.
 
 ## Generated policy
 
@@ -65,16 +88,22 @@ and scope.
 | Existing root-tool, `su`, or root-runtime artifact | Exact `SUS_PATH_LOOP` entry | Medium or high |
 | Narrow live KernelSU/module-backed mount | Exact `kernel_umount` target | Low |
 | Hosts, APEX, partition-root, or other broad mount | Exact `kernel_umount` target | High |
-| Mount ID at least 1,000,000,000 or peer/master/propagation ID at least 100,000 | `HIDE_SUS_MNTS_LATE=1` mount-view attempt | High |
+| Large mount/peer/master/propagation IDs | Diagnostic evidence only; never a correction by themselves | None |
 | SuSFS logging enabled | `ENABLE_LOG=0` | Low |
 | AVC context spoofing disabled | `ENABLE_AVC_LOG_SPOOFING=1` | Low |
 | Kernel umount or automatic mount discovery disabled | Enable the supported control | Low |
 | Supported KernelSU `selinux_hide` control disabled | `SELINUX_HIDE_MODE=enabled` | Medium |
 
-The peer-group threshold includes the previously observed `199949` value.
-Because late blanket mount filtering can create different views between normal
-and isolated processes, it is a high-risk attempt and is never enabled by the
-safe boot pass.
+Raw mount-ID magnitude is not a reliable suspiciousness heuristic. Device
+testing showed every readable app namespace can legitimately fall into the same
+large-ID family. Autopilot may record IDs for diagnostics, but it must compare
+actual mount topology, provenance, and cross-namespace visibility before
+generating a correction.
+
+Android 17 device testing separately proved that keeping the supported
+non-superuser SuSFS mount filter enabled after boot can be necessary for
+`zygote_next`/isolated-process consistency. That behavior is tracked as a
+validated controller policy change, not inferred from mount-ID size.
 
 Selecting an actually broad mount target is the only generated action that
 also enables `ALLOW_BROAD_KERNEL_UMOUNT=1`. An unrelated warning does not
@@ -117,10 +146,12 @@ result without storing detector output in a public location.
 
 **Verify** rescans the policy and reports one of three persistent outcomes:
 
-- **Verified clean** when no supported correction remains and the enabled
-  KernelSU runtime layer reports success.
-- **Clean with inactive rules** when configured paths no longer exist. These
-  rules remain visible for cleanup but are not an active detection failure.
+- **Configured policy checks passed** when no supported correction remains
+  and the enabled KernelSU runtime layer reports success. App visibility
+  remains untested.
+- **Policy checks passed with inactive rules** when configured paths no longer
+  exist. These rules remain visible for cleanup but are not an active policy
+  failure; app visibility remains untested.
 - **Attention required** for remaining supported corrections, mount
   registration failures, or an unavailable KernelSU feature/mount interface.
 
@@ -153,7 +184,8 @@ Autopilot does not:
 - change Developer Options or ADB while `ADB_MODE=unchanged`;
 - indiscriminately hide every module library or filesystem path;
 - wipe KernelSU's global umount list;
-- silently enable broad mount filtering or broad partition unmounts;
+- infer hiding policy from raw mount-ID magnitude alone;
+- silently enable broad partition unmounts;
 - claim to fix TEE, certificate, package, property, or anonymous-memory
   evidence without an installed supported hook; or
 - promise that every third-party detector will report a stock device.

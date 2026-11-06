@@ -11,7 +11,8 @@ STATE_DIR="$PERSISTENT_DIR/state"
 PROC_ROOT="$TEST_ROOT/proc"
 MAP_ROOT="$TEST_ROOT/data/adb/modules"
 mkdir -p "$PERSISTENT_DIR" "$STATE_DIR" "$PROC_ROOT/4321" \
-	"$MAP_ROOT/target/lib64" "$MAP_ROOT/unrelated/lib64" "$TEST_ROOT/bin"
+	"$MAP_ROOT/target/lib64" "$MAP_ROOT/unrelated/lib64" "$TEST_ROOT/bin" \
+	"$TEST_ROOT/tmp" "$TEST_ROOT/apex/bin"
 
 printf '# exact map targets\n%s\n' "$MAP_ROOT/target/lib64/already.so" > "$PERSISTENT_DIR/sus_maps.txt"
 printf '# paths\n' > "$PERSISTENT_DIR/sus_paths.txt"
@@ -19,7 +20,7 @@ printf '# loop paths\n' > "$PERSISTENT_DIR/sus_paths_loop.txt"
 printf '# umount paths\n' > "$PERSISTENT_DIR/kernel_umount.txt"
 cat > "$PERSISTENT_DIR/config.txt" <<'EOF'
 HIDE_SUS_MNTS_NON_SU=1
-HIDE_SUS_MNTS_LATE=0
+HIDE_SUS_MNTS_LATE=1
 ENABLE_LOG=0
 ENABLE_AVC_LOG_SPOOFING=1
 KERNEL_UMOUNT_MODE=enabled
@@ -42,6 +43,8 @@ EOF
 printf 'mapped\n' > "$MAP_ROOT/target/lib64/already.so"
 printf 'candidate\n' > "$MAP_ROOT/target/lib64/exact-candidate.so"
 printf 'unrelated\n' > "$MAP_ROOT/unrelated/lib64/not-mapped.so"
+printf 'running\n' > "$TEST_ROOT/tmp/ksud"
+printf 'apex\n' > "$TEST_ROOT/apex/bin/su"
 
 cat > "$PROC_ROOT/4321/maps" <<EOF
 70000000-70001000 r--p 00000000 103:06 100 $MAP_ROOT/target/lib64/already.so
@@ -58,9 +61,9 @@ EOF
 chmod 755 "$TEST_ROOT/bin/pidof"
 
 cat > "$TEST_ROOT/mountinfo" <<EOF
-31 25 0:26 / / rw,relatime - rootfs rootfs rw
-40 31 0:50 /data/adb/modules/hosts/system/etc/hosts /system/etc/hosts ro - tmpfs KSU rw
-41 31 0:51 /data/adb/modules/overlay/system_ext /system_ext ro - tmpfs KSU rw
+2000000000 25 0:26 / / rw,relatime shared:200000 - rootfs rootfs rw
+2000000001 2000000000 0:50 /data/adb/modules/hosts/system/etc/hosts /system/etc/hosts ro shared:200000 - tmpfs KSU rw
+2000000002 2000000000 0:51 /data/adb/modules/overlay/system_ext /system_ext ro shared:200000 - tmpfs KSU rw
 EOF
 
 export PERSISTENT_DIR
@@ -71,6 +74,8 @@ export SUSAF_PROC_ROOT="$PROC_ROOT"
 export SUSAF_COVERAGE_MAP_ROOTS="$MAP_ROOT"
 export SUSAF_COVERAGE_REQUIRE_EXISTS=1
 export SUSAF_MOUNTINFO="$TEST_ROOT/mountinfo"
+export SUSAF_EXPOSURE_TMP_ROOT="$TEST_ROOT/tmp"
+export SUSAF_EXPOSURE_APEX_SU="$TEST_ROOT/apex/bin/su"
 
 get_conf() {
 	key="$1"
@@ -83,6 +88,7 @@ get_conf() {
 
 . "$ROOT/module/lib/kernel-umount.sh"
 . "$ROOT/module/lib/coverage.sh"
+. "$ROOT/module/lib/exposure-audit.sh"
 
 output=$(coverage_scan com.example.detector)
 report="$STATE_DIR/coverage.report.txt"
@@ -92,10 +98,19 @@ grep -Fqx 'mode=app' "$report"
 grep -Fqx 'package=com.example.detector' "$report"
 grep -Fqx 'process.count=1' "$report"
 grep -Fqx 'candidate.count=3' "$report"
+grep -Fqx 'exposure.count=2' "$report"
+grep -Fqx 'exposure.result=observed-unverified' "$report"
+grep -Fqx 'exposure.app_visibility=not-tested' "$report"
+grep -Fqx 'exposure.policy_action=none' "$report"
+grep -Fq "$TEST_ROOT/tmp/ksud" "$report"
+grep -Fq "$TEST_ROOT/apex/bin/su" "$report"
 grep -Fqx 'candidate.safe=1' "$report"
 grep -Fqx 'candidate.risky=2' "$report"
 grep -Fqx 'candidate.sus_maps=1' "$report"
 grep -Fqx 'candidate.kernel_umount=2' "$report"
+grep -Fqx 'mount.high_id_namespaces=1' "$report"
+! grep -Fq 'reason=high_mount_id' "$report"
+! grep -Fq 'target=HIDE_SUS_MNTS_LATE=1' "$report"
 grep -Fqx "candidate.1.target=$MAP_ROOT/target/lib64/exact-candidate.so" "$report"
 grep -Fqx 'candidate.1.kind=sus_map' "$report"
 grep -Fqx 'candidate.1.reason=mapped_module_file' "$report"
@@ -110,6 +125,15 @@ printf '%s\n' "$output" | grep -Fqx 'result=ok'
 grep -Fqx 'operation=audit' "$STATE_DIR/coverage.progress.txt"
 grep -Fqx 'status=complete' "$STATE_DIR/coverage.progress.txt"
 grep -Fqx 'stage=complete' "$STATE_DIR/coverage.progress.txt"
+
+# A full-device scan must also emit its completed report to stdout. This is the
+# path used by the CLI and previously produced an on-device report with no
+# visible command output.
+full_output=$(coverage_scan)
+printf '%s\n' "$full_output" | grep -Fqx 'schema=2'
+printf '%s\n' "$full_output" | grep -Fqx 'mode=autopilot'
+printf '%s\n' "$full_output" | grep -Fqx 'result=ok'
+grep -Fqx 'status=complete' "$STATE_DIR/coverage.progress.txt"
 
 # A hostile package string must be rejected before pidof is called.
 if coverage_scan 'com.example;touch.bad' >/dev/null 2>&1; then
@@ -128,6 +152,8 @@ grep -Fqx "$MAP_ROOT/target/lib64/exact-candidate.so" "$PERSISTENT_DIR/sus_maps.
 ! grep -Fqx '/system/etc/hosts' "$PERSISTENT_DIR/kernel_umount.txt"
 printf '%s\n' "$apply_output" | grep -Fqx 'result=applied'
 printf '%s\n' "$apply_output" | grep -Fqx 'added.sus_maps=1'
+[ -f "$TEST_ROOT/tmp/ksud" ]
+[ -f "$TEST_ROOT/apex/bin/su" ]
 checkpoint=$(printf '%s\n' "$apply_output" | sed -n 's/^checkpoint=//p')
 [ -d "$checkpoint" ]
 grep -Fqx "$MAP_ROOT/target/lib64/already.so" "$checkpoint/sus_maps.txt"
@@ -168,6 +194,9 @@ result=ok
 EOF
 verify_output=$(coverage_verify)
 printf '%s\n' "$verify_output" | grep -Fqx 'result=clean-with-stale'
+printf '%s\n' "$verify_output" | grep -Fqx 'app_visibility=not-tested'
+printf '%s\n' "$verify_output" | grep -Fqx 'verification.scope=configured_rules_and_kernel_umount'
+printf '%s\n' "$verify_output" | grep -Fqx 'observations.count=2'
 printf '%s\n' "$verify_output" | grep -Fqx 'missing.configured=1'
 printf '%s\n' "$verify_output" | grep -Fqx 'remaining.candidates=0'
 grep -Fqx 'operation=verify' "$STATE_DIR/coverage.progress.txt"
