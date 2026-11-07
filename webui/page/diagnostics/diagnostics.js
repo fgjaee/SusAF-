@@ -376,7 +376,6 @@ async function waitForCoverageBackground(sequence) {
     let idleSince = 0;
     while (sequence === coverageRequestSequence) {
         await pollCoverageProgress();
-        const status = await getCoverageBackgroundStatus();
         const progressResult = await exec('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
         const progress = progressResult.errno === 0 && progressResult.stdout.trim()
             ? parseDiagnostics(progressResult.stdout) : null;
@@ -400,6 +399,12 @@ async function waitForCoverageBackground(sequence) {
             }
         }
 
+        // A completed report is authoritative even if the worker/status bridge
+        // has disappeared. Retry transient bridge failures before reporting idle.
+        const status = await getCoverageBackgroundStatus().catch(error => {
+            console.debug('Audit worker status temporarily unavailable:', error);
+            return null;
+        });
         if (status?.status === 'running') {
             idleSince = 0;
         } else {

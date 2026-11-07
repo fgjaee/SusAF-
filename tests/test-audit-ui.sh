@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+node --input-type=module <<'JS'
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const source = fs.readFileSync('webui/page/diagnostics/diagnostics.js', 'utf8');
+const fn = source.slice(source.indexOf('async function waitForCoverageBackground('), source.indexOf('async function startCoverageBackground('));
+const progress = 'operation=audit\nstatus=complete\nupdated.epoch=1794087545';
+const report = 'schema=2\nresult=ok\naudit.completed=1\ngenerated.epoch=1794087530';
+let calls = 0;
+const context = vm.createContext({
+    coverageRequestSequence: 1, basePath: '/fixture', console, Date,
+    pollCoverageProgress: async () => {},
+    parseDiagnostics: text => Object.fromEntries(text.split('\n').map(line => line.split('='))),
+    exec: async command => ({errno: 0, stdout: command.includes('progress.txt') ? progress : report}),
+    getCoverageBackgroundStatus: async () => { calls++; throw new Error('bridge disconnected'); },
+});
+vm.runInContext(fn, context);
+assert.equal(await vm.runInContext('waitForCoverageBackground(1)', context), report);
+assert.equal(calls, 0, 'committed completion must not require a live status bridge');
+const xml = fs.readFileSync('webui/public/locales/strings/en.xml', 'utf8');
+for (const stage of ['exposure', 'verifying_app']) {
+    assert.ok(xml.includes(`name="coverage_stage_${stage}"`), `${stage} needs its own label`);
+}
+console.log('Audit UI completion and stage labels passed');
+JS

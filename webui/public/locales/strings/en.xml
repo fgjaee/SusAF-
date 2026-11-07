@@ -353,6 +353,8 @@
     <string name="coverage_stage_artifacts">Checking device artifacts…</string>
     <string name="coverage_stage_process_maps">Reading application process maps…</string>
     <string name="coverage_stage_mount_namespaces">Inspecting mount namespaces…</string>
+    <string name="coverage_stage_exposure">Collecting audit evidence…</string>
+    <string name="coverage_stage_verifying_app">Checking the app verifier…</string>
     <string name="coverage_stage_controls">Checking supported spoof controls…</string>
     <string name="coverage_stage_finalizing">Generating the policy…</string>
     <string name="coverage_stage_evaluating">Evaluating verification results…</string>
