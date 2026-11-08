@@ -20,6 +20,20 @@ const context = vm.createContext({
 vm.runInContext(fn, context);
 assert.equal(await vm.runInContext('waitForCoverageBackground(1)', context), report);
 assert.equal(calls, 0, 'committed completion must not require a live status bridge');
+// A temporary bridge rejection must not fail an otherwise completed audit.
+let reads = 0;
+context.exec = async command => {
+    if (++reads === 1) throw new Error('temporary bridge interruption');
+    return {errno: 0, stdout: command.includes('progress.txt') ? progress : report};
+};
+context.getCoverageBackgroundStatus = async () => ({status: 'running'});
+context.window = {setTimeout: callback => callback()};
+assert.equal(await vm.runInContext('waitForCoverageBackground(1)', context), report);
+// An old success must not satisfy a newer request.
+let clock = 0;
+context.Date = {now: () => clock += 16000};
+context.getCoverageBackgroundStatus = async () => ({status: 'idle'});
+await assert.rejects(vm.runInContext('waitForCoverageBackground(1, 1794088000)', context), /no matching completed report/);
 const xml = fs.readFileSync('webui/public/locales/strings/en.xml', 'utf8');
 for (const stage of ['exposure', 'verifying_app']) {
     assert.ok(xml.includes(`name="coverage_stage_${stage}"`), `${stage} needs its own label`);

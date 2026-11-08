@@ -401,11 +401,14 @@
     <string name="workspace_eyebrow">SUS’AF / DEVICE OVERVIEW</string>
     <string name="workspace_scan_hint">Collects a new snapshot. An audit does not apply changes.</string>
     <string name="workspace_focused">Audit a specific app</string>
-    <string name="workspace_latest">LATEST AUDIT</string>
+    <string name="workspace_latest">SAVED AUDIT REPORT</string>
     <string name="workspace_completed">Audit completed</string>
-    <string name="workspace_saved">Saved audit results</string>
+    <string name="workspace_saved">Last saved audit</string>
     <string name="workspace_visibility">%s observed path(s) remain visible to the verifier. Completion does not mean these findings are resolved.</string>
     <string name="workspace_unverified">App visibility is not fully verified. Review evidence before treating findings as resolved.</string>
     <string name="workspace_advanced">Advanced diagnostics</string>
     <string name="workspace_advanced_hint">Runtime details, kernel state, configured rules, boot stages, and migration history.</string>
+    <string name="coverage_scan_unconfirmed">Could not confirm the latest audit. Saved results below may be from an earlier run. Detail: %s</string>
+    <string name="workspace_report_time">Report saved: %s</string>
+    <string name="workspace_time_unknown">time unavailable</string>
 </resources>

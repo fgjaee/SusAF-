@@ -372,20 +372,32 @@ async function getCoverageBackgroundStatus() {
     return parseDiagnostics(result.stdout);
 }
 
-async function waitForCoverageBackground(sequence) {
+async function waitForCoverageBackground(sequence, minimumEpoch = 0) {
     let idleSince = 0;
+    let lastReadError = '';
+    const readState = async command => {
+        try {
+            const result = await exec(command);
+            if (result.errno !== 0) lastReadError = result.stderr || 'state read returned ' + result.errno;
+            return result;
+        } catch (error) {
+            lastReadError = error.message || String(error);
+            return { errno: 1, stdout: '' };
+        }
+    };
     while (sequence === coverageRequestSequence) {
         await pollCoverageProgress();
-        const progressResult = await exec('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
+        const progressResult = await readState('cat "' + basePath + '/state/coverage.progress.txt" 2>/dev/null');
         const progress = progressResult.errno === 0 && progressResult.stdout.trim()
             ? parseDiagnostics(progressResult.stdout) : null;
 
-        if (progress?.operation === 'audit' && progress.status === 'failed') {
+        if (progress?.operation === 'audit' && progress.status === 'failed'
+            && Number(progress['updated.epoch'] || 0) >= minimumEpoch) {
             throw new Error(progress.detail || 'background coverage scan failed');
         }
 
         if (progress?.operation === 'audit' && progress.status === 'complete') {
-            const report = await exec('cat "' + basePath + '/state/coverage.report.txt" 2>/dev/null');
+            const report = await readState('cat "' + basePath + '/state/coverage.report.txt" 2>/dev/null');
             if (report.errno === 0 && report.stdout.trim()) {
                 const values = parseDiagnostics(report.stdout);
                 const generated = Number.parseInt(values['generated.epoch'] || '0', 10);
@@ -393,7 +405,7 @@ async function waitForCoverageBackground(sequence) {
                 const sameRun = values.schema === '2'
                     && values.result === 'ok'
                     && values['audit.completed'] === '1'
-                    && generated > 0 && updated > 0
+                    && generated > 0 && updated > 0 && generated >= minimumEpoch
                     && generated <= updated && (updated - generated) <= 120;
                 if (sameRun) return report.stdout;
             }
@@ -413,7 +425,7 @@ async function waitForCoverageBackground(sequence) {
             // state time to settle instead of turning that normal race into
             // a false red failure in the WebUI.
             if (Date.now() - idleSince >= 15000) {
-                throw new Error('background audit stopped before committing a current report');
+                throw new Error(lastReadError || 'Audit worker is no longer running and no matching completed report was found');
             }
         }
         await new Promise(resolve => window.setTimeout(resolve, 900));
@@ -460,7 +472,7 @@ async function resumeCoverageBackground() {
     } catch (error) {
         if (sequence !== coverageRequestSequence) return;
         if (coverageOperation) await finishCoverageOperation('failed');
-        setCoverageMessage(getString('coverage_scan_failed'), true);
+        setCoverageMessage(getString('coverage_scan_unconfirmed', error.message || String(error)), true);
         console.warn('Background coverage scan failed:', error);
     } finally {
         if (sequence === coverageRequestSequence) setCoverageBusy(false);
@@ -474,6 +486,12 @@ function renderCoverageVerification(values) {
         return;
     }
 
+    const reportEpoch = Number(currentCoverage?.['generated.epoch'] || 0);
+    const verificationEpoch = Number(values['generated.epoch'] || 0);
+    if (reportEpoch && (!verificationEpoch || verificationEpoch < reportEpoch)) {
+        panel.hidden = true;
+        return;
+    }
     const result = values.result || 'not-run';
     if (result === 'not-run') {
         panel.hidden = true;
@@ -608,16 +626,16 @@ function renderExposureEvidence(values) {
 function renderCoverage(values) {
     if (values.schema !== '2') throw new Error('unsupported coverage schema');
     currentCoverage = values;
+    document.getElementById('coverage-verification').hidden = true;
     // Completion describes the scan, never the effectiveness of a correction.
-    const completed = values['audit.completed'] === '1' && values.result === 'ok';
     const checked = values['exposure.app_visibility'] === 'checked';
     const visible = Number.parseInt(values['exposure.visible_count'] || '0', 10) || 0;
     const title = document.getElementById('workspace-outcome-title');
     const detail = document.getElementById('workspace-outcome-detail');
-    title.textContent = getString(completed ? 'workspace_completed' : 'workspace_saved');
-    detail.textContent = checked
+    title.textContent = getString('workspace_saved');
+    detail.textContent = getString('workspace_report_time', values['generated.at'] || getString('workspace_time_unknown')) + ' · ' + (checked
         ? getString('workspace_visibility', visible)
-        : getString('workspace_unverified');
+        : getString('workspace_unverified'));
 
 
     const packageName = values.package || 'none';
@@ -709,7 +727,7 @@ async function loadCoverage(scan = false, packageName = '') {
             await waitForCoveragePaint();
             await startCoverageBackground(packageName);
             if (sequence !== coverageRequestSequence) return;
-            stdout = await waitForCoverageBackground(sequence);
+            stdout = await waitForCoverageBackground(sequence, Math.floor(coverageOperationStartedAt / 1000));
             if (sequence !== coverageRequestSequence || !stdout) return;
         } else {
             const result = await exec(`cat "${basePath}/state/coverage.report.txt"`);
@@ -729,7 +747,7 @@ async function loadCoverage(scan = false, packageName = '') {
     } catch (error) {
         if (sequence !== coverageRequestSequence) return;
         if (scan && coverageOperation) await finishCoverageOperation('failed');
-        setCoverageMessage(getString('coverage_scan_failed'), true);
+        setCoverageMessage(getString('coverage_scan_unconfirmed', error.message || String(error)), true);
         console.warn('Coverage scan failed:', error);
     } finally {
         if (sequence === coverageRequestSequence) setCoverageBusy(false);
