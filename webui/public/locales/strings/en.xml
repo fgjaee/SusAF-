@@ -121,10 +121,10 @@
     <string name="diagnostics_generated_at">Snapshot: %s</string>
     <string name="diagnostics_refresh">Refresh</string>
     <string name="diagnostics_export">Export</string>
-    <string name="diagnostics_exporting">Refreshing and exporting diagnostics…</string>
+    <string name="diagnostics_exporting">Saving existing diagnostics and audit logs…</string>
     <string name="diagnostics_refreshed">Diagnostics refreshed</string>
     <string name="diagnostics_exported">Diagnostics saved to %s</string>
-    <string name="diagnostics_export_failed">Failed to export diagnostics</string>
+    <string name="diagnostics_export_failed">Could not save diagnostics. If no snapshot exists, tap Refresh first.</string>
     <string name="diagnostics_unavailable">No valid snapshot is available yet. Tap Refresh to create one.</string>
     <string name="diagnostics_unknown">unknown</string>
     <string name="diagnostics_privacy">This snapshot contains states, counts, and public system versions. It excludes configured target paths and UserHub script contents.</string>

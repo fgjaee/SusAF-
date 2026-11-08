@@ -108,6 +108,7 @@ const TARGETS = [
     ['targets.mount_hiding_generated', null, 'diagnostics_target_generated_mounts'],
 ];
 
+let diagnosticsExportInFlight = false;
 let requestSequence = 0;
 let coverageRequestSequence = 0;
 let currentCoverage = null;
@@ -864,6 +865,8 @@ async function loadDiagnostics(refresh = false) {
 }
 
 async function exportDiagnostics() {
+    if (diagnosticsExportInFlight) return;
+    diagnosticsExportInFlight = true;
     const status = document.getElementById('diagnostics-export-status');
     setBusy(true);
     status.className = 'diagnostics-export-status exporting';
@@ -871,11 +874,27 @@ async function exportDiagnostics() {
     status.hidden = false;
     let result;
     try {
+        // Paint feedback before invoking the Android root bridge. Export is
+        // read-only: Refresh is the explicit action for new device checks.
+        await waitForCoveragePaint();
         result = await exec(`
 REPORT="${basePath}/state/diagnostics.properties"
-sh "${moduleDirectory}/SusAF.sh" --diagnostics >/dev/null || exit 1
-OUT="/storage/emulated/0/Download/SusAF_diagnostics_$(date +%Y%m%d_%H%M%S).txt"
-cp "$REPORT" "$OUT" || exit 1
+[ -s "$REPORT" ] || { echo "No saved snapshot. Tap Refresh first." >&2; exit 1; }
+OUT="/storage/emulated/0/Download/SusAF_diagnostics_$(date +%Y%m%d_%H%M%S)_$$.txt"
+PART="$OUT.partial"
+trap 'rm -f "$PART"' EXIT HUP INT TERM
+{
+  cat "$REPORT" || exit 1
+  for NAME in coverage.progress.txt coverage.audit.pid coverage.audit.launch coverage.report.txt coverage.verify.txt coverage.background.log; do
+    printf '\n=== %s (saved state; last 160 lines) ===\n' "$NAME"
+    if [ -r "${basePath}/state/$NAME" ]; then
+      tail -n 160 "${basePath}/state/$NAME"
+    else
+      printf 'Not recorded\n'
+    fi
+  done
+} > "$PART" || exit 1
+mv "$PART" "$OUT" || exit 1
 printf '%s\n' "$OUT"
     `);
         if (result.errno === 0 && result.stdout.trim()) {
@@ -894,6 +913,7 @@ printf '%s\n' "$OUT"
         showPrompt(status.textContent, false, 5000);
         console.warn('Diagnostics export failed:', error);
     } finally {
+        diagnosticsExportInFlight = false;
         setBusy(false);
     }
 }
