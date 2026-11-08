@@ -147,6 +147,11 @@ parsed=$(probe_parse_reply 'Result: Bundle[{result=SUSAFPROBEV1__10739__6__MISSI
 # Replay the exact eight-result response captured on the affected device.
 SUSAF_FAKE_PROBE_REPLY='Result: Bundle[{result=SUSAFPROBEV1__10756__8__MISSING,MISSING,MISSING,MISSING,MISSING,MISSING,MISSING,MISSING}]'
 export SUSAF_FAKE_PROBE_REPLY
+# Simulate a root bridge where the previous grep -Eq field check fails.
+grep() {
+    [ "${1:-}" != -Eq ] || return 2
+    command grep "$@"
+}
 for i in 1 2 3 4 5 6 7 8; do
     printf '/data/local/tmp/root-%s\tfile\ttemp-root\tlisted-loop\tstatic-only\n' "$i"
 done > "$f"
@@ -155,3 +160,4 @@ probe_verify_file "$f"
 [ "$PROBE_UID" = 10756 ]
 [ ! -e "$PERSISTENT_DIR/state/probe.last_error.txt" ]
 [ "$(awk -F '\t' '$6=="MISSING" && $7=="10756" {n++} END {print n+0}' "$f")" = 8 ]
+unset -f grep

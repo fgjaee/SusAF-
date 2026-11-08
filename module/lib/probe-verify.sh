@@ -27,7 +27,7 @@ probe_record_error() {
 
 probe_check_batch() {
     local file="$1" out="$2" start="$3" stop="$4"
-    local payload reply parsed uid remainder size states expected_count attempt rc
+    local payload reply parsed app_uid size states expected_count attempt rc
     payload=$(awk -F '\t' -v first="$start" -v last="$stop" '
         NR>=first && NR<=last { if (NR>first) printf "\n"; printf "%s", $1 }
     ' "$file") || return 1
@@ -48,20 +48,20 @@ probe_check_batch() {
         rc=
     done
     [ -n "$parsed" ] || return 1
-    uid=${parsed%%|*}
-    remainder=${parsed#*|}
-    size=${remainder%%|*}
-    states=${remainder#*|}
-    # Validate the parsed protocol fields directly. On-device diagnostics
-    # showed a valid UID rejected by the shell's glob-based digit check.
-    printf '%s\n' "$uid" | grep -Eq '^[0-9]+$' || { probe_record_error invalid-app-uid "$reply" "$parsed"; return 1; }
-    printf '%s\n' "$size" | grep -Eq '^[0-9]+$' || { probe_record_error invalid-count "$reply" "$parsed"; return 1; }
-    [ "$uid" -ge 10000 ] || { probe_record_error non-app-uid "$reply" "$parsed"; return 1; }
+    # Android's shell rejected a valid UID after parsing the provider reply.
+    # Extract the fields with awk, which is already used for audit records,
+    # instead of shell pattern removal and grep in the root bridge.
+    app_uid=$(printf '%s\n' "$parsed" | awk -F '[|]' 'NF == 3 { print $1 }')
+    size=$(printf '%s\n' "$parsed" | awk -F '[|]' 'NF == 3 { print $2 }')
+    states=$(printf '%s\n' "$parsed" | awk -F '[|]' 'NF == 3 { print $3 }')
+    printf '%s\n' "$app_uid" | awk '/^[0-9]+$/ { valid=1 } END { exit !valid }' || { probe_record_error invalid-app-uid "$reply" "$parsed"; return 1; }
+    printf '%s\n' "$size" | awk '/^[0-9]+$/ { valid=1 } END { exit !valid }' || { probe_record_error invalid-count "$reply" "$parsed"; return 1; }
+    [ "$app_uid" -ge 10000 ] || { probe_record_error non-app-uid "$reply" "$parsed"; return 1; }
     expected_count=$((stop - start + 1))
     [ "$size" -eq "$expected_count" ] || { probe_record_error count-mismatch "$reply" "$parsed"; return 1; }
-    printf '%s\n' "$states" | grep -Eq '^[A-Z_,]+$' || { probe_record_error invalid-states "$reply" "$parsed"; return 1; }
+    printf '%s\n' "$states" | awk '/^[A-Z_,]+$/ { valid=1 } END { exit !valid }' || { probe_record_error invalid-states "$reply" "$parsed"; return 1; }
 
-    awk -F '\t' -v first="$start" -v last="$stop" -v values="$states" -v uid="$uid" '
+    awk -F '\t' -v first="$start" -v last="$stop" -v values="$states" -v app_uid="$app_uid" '
         BEGIN {
             n=split(values, a, ",")
             if (n != last-first+1) exit 1
@@ -70,9 +70,9 @@ probe_check_batch() {
                     a[i]!="ERROR" && a[i]!="INVALID") exit 1
             }
         }
-        NR>=first && NR<=last { print $0 "\t" a[NR-first+1] "\t" uid }
+        NR>=first && NR<=last { print $0 "\t" a[NR-first+1] "\t" app_uid }
     ' "$file" >> "$out" || { probe_record_error invalid-state-list "$reply" "$parsed"; return 1; }
-    PROBE_UID="$uid"
+    PROBE_UID="$app_uid"
 }
 
 probe_verify_file() {
