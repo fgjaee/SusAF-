@@ -105,7 +105,7 @@ coverage_spawn_worker() {
 }
 
 coverage_scan_background_status() {
-	local pid_file package_file launch_file pid="" package="" launch_mode="" status=idle
+	local pid_file package_file launch_file pid="" package="" launch_mode="" status=idle progress_epoch="" now
 	pid_file=$(coverage_background_pid_file)
 	package_file=$(coverage_background_package_file)
 	launch_file=$(coverage_background_launch_file)
@@ -116,7 +116,24 @@ coverage_scan_background_status() {
 		status=running
 	else
 		pid=""
-		rm -f "$pid_file" "$package_file" "$launch_file"
+		# The root bridge can lose the launcher PID while the scan continues.
+		# Fresh worker progress keeps a second scan from starting over it.
+		progress_epoch=$(awk -F= '
+			$1=="operation" { operation=$2 }
+			$1=="status" { status=$2 }
+			$1=="updated.epoch" { epoch=$2 }
+			END { if (operation=="audit" && status=="running") print epoch }
+		' "$PERSISTENT_DIR/state/coverage.progress.txt" 2>/dev/null)
+		now=$(date +%s 2>/dev/null)
+		case "$progress_epoch:$now" in
+			*[!0-9:]*|:*|*:) progress_epoch=0; now=0 ;;
+		esac
+		if [ "$progress_epoch" -gt 0 ] && [ "$now" -ge "$progress_epoch" ] &&
+			[ $((now - progress_epoch)) -le 60 ]; then
+			status=running
+		else
+			rm -f "$pid_file" "$package_file" "$launch_file"
+		fi
 	fi
 	coverage_put schema 1
 	coverage_put status "$status"

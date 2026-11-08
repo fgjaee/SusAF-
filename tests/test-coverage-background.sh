@@ -69,6 +69,22 @@ printf '%s\n' "$status" | grep -Fqx 'status=idle'
 grep -Fqx 'status=complete' "$PERSISTENT_DIR/state/coverage.progress.txt"
 grep -Fqx 'schema=2' "$PERSISTENT_DIR/state/coverage.report.txt"
 
+# The launcher PID may disappear while the worker is still writing progress.
+cat > "$PERSISTENT_DIR/state/coverage.progress.txt" <<EOF
+schema=1
+operation=audit
+status=running
+updated.epoch=$(date +%s)
+EOF
+printf '%s\n' 'all-running-apps' > "$PERSISTENT_DIR/state/coverage.audit.package"
+status=$(coverage_scan_background_status)
+printf '%s\n' "$status" | grep -Fqx 'status=running'
+[ -f "$PERSISTENT_DIR/state/coverage.audit.package" ]
+sed -i 's/^updated.epoch=.*/updated.epoch=1/' "$PERSISTENT_DIR/state/coverage.progress.txt"
+status=$(coverage_scan_background_status)
+printf '%s\n' "$status" | grep -Fqx 'status=idle'
+[ ! -f "$PERSISTENT_DIR/state/coverage.audit.package" ]
+
 if coverage_scan_background 'bad;package' >/dev/null 2>&1; then
     echo 'unsafe background package accepted' >&2
     exit 1

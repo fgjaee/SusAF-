@@ -273,18 +273,6 @@ async function applyCapabilityVisibility() {
 }
 
 /**
- * Count non-comment, non-blank lines in a config file under PERSISTENT_DIR.
- * @param {string} fileName
- * @returns {Promise<number>}
- */
-async function countEntries(fileName) {
-    const result = await exec(`sed 's/#.*//' "${basePath}/${fileName}" 2>/dev/null | grep -c '[^[:space:]]'`);
-    if (result.errno !== 0) return 0;
-    const n = parseInt(result.stdout.trim(), 10);
-    return Number.isFinite(n) ? n : 0;
-}
-
-/**
  * Build the DOM for a single config box.
  * @param {object} box entry from CONFIG_BOXES
  * @returns {HTMLElement}

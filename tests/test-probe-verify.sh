@@ -34,6 +34,10 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 [ -n "$payload" ] || exit 1
+if [ -n "${SUSAF_FAKE_PROBE_REPLY:-}" ]; then
+    printf '%s\n' "$SUSAF_FAKE_PROBE_REPLY"
+    exit 0
+fi
 count=$(printf '%s\n' "$payload" | awk 'END {print NR}')
 status=$(printf '%s\n' "$payload" | awk '
     {
@@ -139,3 +143,15 @@ parsed=$(probe_parse_reply 'Result: Bundle[{result=SUSAFPROBEV1__10739__6__MISSI
     echo "Bundle parser failed: $parsed" >&2
     exit 1
 }
+
+# Replay the exact eight-result response captured on the affected device.
+SUSAF_FAKE_PROBE_REPLY='Result: Bundle[{result=SUSAFPROBEV1__10756__8__MISSING,MISSING,MISSING,MISSING,MISSING,MISSING,MISSING,MISSING}]'
+export SUSAF_FAKE_PROBE_REPLY
+for i in 1 2 3 4 5 6 7 8; do
+    printf '/data/local/tmp/root-%s\tfile\ttemp-root\tlisted-loop\tstatic-only\n' "$i"
+done > "$f"
+probe_verify_file "$f"
+[ "$PROBE_STATUS" = ready ]
+[ "$PROBE_UID" = 10756 ]
+[ ! -e "$PERSISTENT_DIR/state/probe.last_error.txt" ]
+[ "$(awk -F '\t' '$6=="MISSING" && $7=="10756" {n++} END {print n+0}' "$f")" = 8 ]

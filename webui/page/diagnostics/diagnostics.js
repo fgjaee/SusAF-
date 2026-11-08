@@ -418,7 +418,13 @@ async function waitForCoverageBackground(sequence, minimumEpoch = 0) {
             console.debug('Audit worker status temporarily unavailable:', error);
             return null;
         });
-        if (status?.status === 'running') {
+        const updatedEpoch = Number(progress?.['updated.epoch'] || 0);
+        const nowEpoch = Math.floor(Date.now() / 1000);
+        const freshProgress = progress?.operation === 'audit'
+            && progress.status === 'running'
+            && updatedEpoch >= minimumEpoch && updatedEpoch > 0
+            && updatedEpoch <= nowEpoch + 10 && nowEpoch - updatedEpoch <= 60;
+        if (status?.status === 'running' || freshProgress) {
             idleSince = 0;
         } else {
             if (!idleSince) idleSince = Date.now();

@@ -5,29 +5,21 @@
 # No probe APK / provider means an explicit NOT_TESTED result.
 
 probe_parse_reply() {
-    local token uid count states
-    case "$1" in
-        *SUSAFPROBEV1__*) token=${1#*SUSAFPROBEV1__} ;;
-        *) return 1 ;;
-    esac
-    uid=${token%%__*}
-    [ "$uid" != "$token" ] || return 1
-    token=${token#*__}
-    count=${token%%__*}
-    [ "$count" != "$token" ] || return 1
-    states=${token#*__}
-    states=${states%%\}*}
-    states=${states%%]*}
-    printf '%s|%s|%s\n' "$uid" "$count" "$states"
+    # The content CLI wraps Bundle values differently across Android builds.
+    # Extract only the bounded protocol fields, never trailing wrapper text.
+    printf '%s\n' "$1" | sed -n \
+        's/^.*SUSAFPROBEV1__\([0-9][0-9]*\)__\([0-9][0-9]*\)__\([A-Z_,][A-Z_,]*\).*$/\1|\2|\3/p' |
+        sed -n '1p'
 }
 
 probe_record_error() {
-    local reason="$1" reply="${2:-}" file="$PERSISTENT_DIR/state/probe.last_error.txt"
+    local reason="$1" reply="${2:-}" parsed="${3:-}" file="$PERSISTENT_DIR/state/probe.last_error.txt"
     mkdir -p "$PERSISTENT_DIR/state" 2>/dev/null || return 0
     umask 077
     {
         printf 'epoch=%s\n' "$(date +%s 2>/dev/null)"
         printf 'reason=%s\n' "$reason"
+        printf 'parsed=%s\n' "$(printf '%s' "$parsed" | tr '\r\n\t' '   ' | sed 's/[[:cntrl:]]//g' | cut -c1-240)"
         printf 'reply=%s\n' "$(printf '%s' "$reply" | tr '\r\n\t' '   ' | sed 's/[[:cntrl:]]//g' | cut -c1-240)"
     } > "${file}.tmp.$$" 2>/dev/null && mv "${file}.tmp.$$" "$file" ||
         rm -f "${file}.tmp.$$"
@@ -60,12 +52,14 @@ probe_check_batch() {
     remainder=${parsed#*|}
     size=${remainder%%|*}
     states=${remainder#*|}
-    case "$uid" in ''|*[!0-9]*) probe_record_error invalid-app-uid "$reply"; return 1 ;; esac
-    case "$size" in ''|*[!0-9]*) probe_record_error invalid-count "$reply"; return 1 ;; esac
-    [ "$uid" -ge 10000 ] || { probe_record_error non-app-uid "$reply"; return 1; }
+    # Validate the parsed protocol fields directly. On-device diagnostics
+    # showed a valid UID rejected by the shell's glob-based digit check.
+    printf '%s\n' "$uid" | grep -Eq '^[0-9]+$' || { probe_record_error invalid-app-uid "$reply" "$parsed"; return 1; }
+    printf '%s\n' "$size" | grep -Eq '^[0-9]+$' || { probe_record_error invalid-count "$reply" "$parsed"; return 1; }
+    [ "$uid" -ge 10000 ] || { probe_record_error non-app-uid "$reply" "$parsed"; return 1; }
     expected_count=$((stop - start + 1))
-    [ "$size" -eq "$expected_count" ] || { probe_record_error count-mismatch "$reply"; return 1; }
-    case "$states" in ''|*[!A-Z_,]*) probe_record_error invalid-states "$reply"; return 1 ;; esac
+    [ "$size" -eq "$expected_count" ] || { probe_record_error count-mismatch "$reply" "$parsed"; return 1; }
+    printf '%s\n' "$states" | grep -Eq '^[A-Z_,]+$' || { probe_record_error invalid-states "$reply" "$parsed"; return 1; }
 
     awk -F '\t' -v first="$start" -v last="$stop" -v values="$states" -v uid="$uid" '
         BEGIN {
@@ -77,7 +71,7 @@ probe_check_batch() {
             }
         }
         NR>=first && NR<=last { print $0 "\t" a[NR-first+1] "\t" uid }
-    ' "$file" >> "$out" || { probe_record_error invalid-state-list "$reply"; return 1; }
+    ' "$file" >> "$out" || { probe_record_error invalid-state-list "$reply" "$parsed"; return 1; }
     PROBE_UID="$uid"
 }
 
