@@ -178,7 +178,7 @@
     <string name="diagnostics_boot_stage_duration">Boot-completed seconds</string>
     <string name="diagnostics_boot_stage_exit">Boot-completed exit</string>
     <string name="diagnostics_migration_update">Migration and updater</string>
-    <string name="diagnostics_migration_resusfs">ReSuSFS migration</string>
+    <string name="diagnostics_migration_resusfs">Legacy configuration import</string>
     <string name="diagnostics_migration_susfs4ksu">susfs4ksu migration</string>
     <string name="diagnostics_updater_source">Updater source</string>
     <string name="diagnostics_updater_commit">Pinned commit</string>
