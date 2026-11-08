@@ -138,6 +138,10 @@ exposure_emit_report() {
     coverage_put exposure.app_visibility "$verification"
     coverage_put exposure.verification_method "$([ "$checked" -gt 0 ] && printf companion-contentprovider || printf none)"
     coverage_put exposure.probe_status "${PROBE_STATUS:-not-run}"
+    if [ "${PROBE_STATUS:-}" = call-failed ] || [ "${PROBE_STATUS:-}" = invalid-response ]; then
+        coverage_put exposure.probe_error "$(sed -n 's/^reason=//p' "$PERSISTENT_DIR/state/probe.last_error.txt" 2>/dev/null | tail -n 1)"
+        coverage_put exposure.probe_reply "$(sed -n 's/^reply=//p' "$PERSISTENT_DIR/state/probe.last_error.txt" 2>/dev/null | tail -n 1)"
+    fi
     coverage_put exposure.probe_uid "${PROBE_UID:-0}"
     coverage_put exposure.visible_count "$visible"
     coverage_put exposure.configured_visible_count "$configured_visible"

@@ -259,6 +259,8 @@
     <string name="coverage_probe_status_no_targets">No targets to verify</string>
     <string name="coverage_probe_status_tools_unavailable">Android verification tools unavailable</string>
     <string name="coverage_probe_status_call_failed">App verifier failed or refused the request</string>
+    <string name="coverage_probe_unresolved">Verification failed (%s). Export diagnostics to see the provider reply.</string>
+    <string name="coverage_probe_blocked_actions">App verification failed; no app visibility based actions can be recommended from this audit.</string>
     <string name="coverage_probe_status_invalid_response">Invalid verifier response</string>
     <string name="coverage_probe_status_not_run">App verification not run</string>
     <string name="coverage_probe_install">Install / update app verifier</string>

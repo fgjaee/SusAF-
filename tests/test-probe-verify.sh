@@ -63,6 +63,7 @@ f="$TEST_ROOT/test.tsv"
 
 probe_verify_file "$f"
 [ "$PROBE_STATUS" = ready ]
+[ ! -e "$PERSISTENT_DIR/state/probe.last_error.txt" ]
 [ "$PROBE_UID" = 10142 ]
 [ "$(awk -F '\t' '$6=="VISIBLE" {n++} END {print n+0}' "$f")" = 1 ]
 [ "$(awk -F '\t' '$6=="MISSING" {n++} END {print n+0}' "$f")" = 1 ]
@@ -118,6 +119,7 @@ SUSAF_FAKE_PROBE_UID=0; export SUSAF_FAKE_PROBE_UID
 printf '/data/local/tmp/ksud\tfile\ttemp-root\tnot-listed\tloop\n' > "$f"
 probe_verify_file "$f"
 [ "$PROBE_STATUS" = call-failed ]
+grep -Fqx 'reason=non-app-uid' "$PERSISTENT_DIR/state/probe.last_error.txt"
 grep -Fq "$(printf '\t')NOT_TESTED$(printf '\t')0" "$f"
 
 # An inconclusive syscall is NOT proof the app cannot see an artifact.

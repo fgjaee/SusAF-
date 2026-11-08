@@ -597,6 +597,11 @@ function renderExposureEvidence(values) {
     const countText = values['exposure.truncated'] === '1'
         ? getString('coverage_evidence_truncated') : '';
     if (countText) status.textContent += ' · ' + countText;
+    if (probeStatus === 'call-failed' || probeStatus === 'invalid-response') {
+        status.textContent += ' · ' + getString('coverage_probe_unresolved',
+            values['exposure.probe_error'] || probeStatus);
+        section.open = true;
+    }
 
     for (let i = 1; i <= count; i++) {
         const path = values[`exposure.${i}.path`];
@@ -711,6 +716,12 @@ function renderCoverage(values) {
     }
 
     empty.hidden = rendered > 0;
+    if (!rendered) {
+        const probeStatus = values['exposure.probe_status'] || 'not-run';
+        empty.textContent = probeStatus === 'call-failed' || probeStatus === 'invalid-response'
+            ? getString('coverage_probe_blocked_actions')
+            : getString('coverage_no_candidates');
+    }
     document.getElementById('coverage-results').hidden = false;
     setCoverageMessage('');
     updateCoverageSelection();
@@ -885,7 +896,7 @@ PART="$OUT.partial"
 trap 'rm -f "$PART"' EXIT HUP INT TERM
 {
   cat "$REPORT" || exit 1
-  for NAME in coverage.progress.txt coverage.audit.pid coverage.audit.launch coverage.report.txt coverage.verify.txt coverage.background.log; do
+  for NAME in coverage.progress.txt coverage.audit.pid coverage.audit.launch coverage.report.txt coverage.verify.txt coverage.background.log probe.last_error.txt; do
     printf '\n=== %s (saved state; last 160 lines) ===\n' "$NAME"
     if [ -r "${basePath}/state/$NAME" ]; then
       tail -n 160 "${basePath}/state/$NAME"

@@ -21,6 +21,18 @@ probe_parse_reply() {
     printf '%s|%s|%s\n' "$uid" "$count" "$states"
 }
 
+probe_record_error() {
+    local reason="$1" reply="${2:-}" file="$PERSISTENT_DIR/state/probe.last_error.txt"
+    mkdir -p "$PERSISTENT_DIR/state" 2>/dev/null || return 0
+    umask 077
+    {
+        printf 'epoch=%s\n' "$(date +%s 2>/dev/null)"
+        printf 'reason=%s\n' "$reason"
+        printf 'reply=%s\n' "$(printf '%s' "$reply" | tr '\r\n\t' '   ' | sed 's/[[:cntrl:]]//g' | cut -c1-240)"
+    } > "${file}.tmp.$$" 2>/dev/null && mv "${file}.tmp.$$" "$file" ||
+        rm -f "${file}.tmp.$$"
+}
+
 probe_check_batch() {
     local file="$1" out="$2" start="$3" stop="$4"
     local payload reply parsed uid remainder size states expected_count attempt rc
@@ -38,14 +50,7 @@ probe_check_batch() {
             rc=$?
         fi
         rc=${rc:-0}
-        mkdir -p "$PERSISTENT_DIR/state" 2>/dev/null || true
-        {
-            printf 'epoch=%s\n' "$(date +%s 2>/dev/null)"
-            printf 'attempt=%s\n' "$attempt"
-            printf 'exit=%s\n' "$rc"
-            printf 'reply=%s\n' "$(printf '%s' "$reply" | tr '\r\n\t' '   ' | sed 's/[[:cntrl:]]//g' | cut -c1-500)"
-        } > "$PERSISTENT_DIR/state/probe.last_error.txt" 2>/dev/null || true
-        chmod 600 "$PERSISTENT_DIR/state/probe.last_error.txt" 2>/dev/null || true
+        probe_record_error "call-attempt-$attempt-exit-$rc" "$reply"
         [ "$attempt" -ge 3 ] || sleep "${SUSAF_PROBE_RETRY_DELAY:-1}"
         attempt=$((attempt + 1))
         rc=
@@ -55,12 +60,12 @@ probe_check_batch() {
     remainder=${parsed#*|}
     size=${remainder%%|*}
     states=${remainder#*|}
-    case "$uid" in ''|*[!0-9]*) return 1 ;; esac
-    case "$size" in ''|*[!0-9]*) return 1 ;; esac
-    [ "$uid" -ge 10000 ] || return 1
+    case "$uid" in ''|*[!0-9]*) probe_record_error invalid-app-uid "$reply"; return 1 ;; esac
+    case "$size" in ''|*[!0-9]*) probe_record_error invalid-count "$reply"; return 1 ;; esac
+    [ "$uid" -ge 10000 ] || { probe_record_error non-app-uid "$reply"; return 1; }
     expected_count=$((stop - start + 1))
-    [ "$size" -eq "$expected_count" ] || return 1
-    case "$states" in ''|*[!A-Z_,]*) return 1 ;; esac
+    [ "$size" -eq "$expected_count" ] || { probe_record_error count-mismatch "$reply"; return 1; }
+    case "$states" in ''|*[!A-Z_,]*) probe_record_error invalid-states "$reply"; return 1 ;; esac
 
     awk -F '\t' -v first="$start" -v last="$stop" -v values="$states" -v uid="$uid" '
         BEGIN {
@@ -72,7 +77,7 @@ probe_check_batch() {
             }
         }
         NR>=first && NR<=last { print $0 "\t" a[NR-first+1] "\t" uid }
-    ' "$file" >> "$out" || return 1
+    ' "$file" >> "$out" || { probe_record_error invalid-state-list "$reply"; return 1; }
     PROBE_UID="$uid"
 }
 
@@ -80,6 +85,7 @@ probe_verify_file() {
     local file="$1" total start stop tmp probe_limit=32 result=ready
     PROBE_STATUS=not-installed
     PROBE_UID=0
+    rm -f "$PERSISTENT_DIR/state/probe.last_error.txt"
     [ -f "$file" ] || return 1
     total=$(awk 'END { print NR + 0 }' "$file")
     [ "$total" -gt 0 ] || { PROBE_STATUS=no-targets; return 0; }
@@ -118,4 +124,8 @@ probe_verify_file() {
     }
     mv "$tmp" "$file" || return 1
     PROBE_STATUS="$result"
+    if [ "$result" = ready ]; then
+        rm -f "$PERSISTENT_DIR/state/probe.last_error.txt"
+    fi
+    return 0
 }
