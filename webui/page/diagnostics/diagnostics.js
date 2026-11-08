@@ -608,6 +608,17 @@ function renderExposureEvidence(values) {
 function renderCoverage(values) {
     if (values.schema !== '2') throw new Error('unsupported coverage schema');
     currentCoverage = values;
+    // Completion describes the scan, never the effectiveness of a correction.
+    const completed = values['audit.completed'] === '1' && values.result === 'ok';
+    const checked = values['exposure.app_visibility'] === 'checked';
+    const visible = Number.parseInt(values['exposure.visible_count'] || '0', 10) || 0;
+    const title = document.getElementById('workspace-outcome-title');
+    const detail = document.getElementById('workspace-outcome-detail');
+    title.textContent = getString(completed ? 'workspace_completed' : 'workspace_saved');
+    detail.textContent = checked
+        ? getString('workspace_visibility', visible)
+        : getString('workspace_unverified');
+
 
     const packageName = values.package || 'none';
     const isAppScan = values.mode === 'app';

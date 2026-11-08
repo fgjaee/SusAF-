@@ -225,18 +225,18 @@
     <string name="diagnostics_updater_rollback">Rollback</string>
     <string name="diagnostics_updater_last_result">Updater last result</string>
     <!-- Sus'AF Autopilot -->
-    <string name="coverage_title">Sus'AF Autopilot</string>
-    <string name="coverage_description">Audits running app processes, mount namespaces, device artifacts, and supported spoof controls. It generates the policy automatically; manual editing remains available in Advanced controls.</string>
+    <string name="coverage_title">Audit workspace</string>
+    <string name="coverage_description">Review the latest evidence, see unresolved findings, and inspect available actions.</string>
     <string name="coverage_autopilot">Automatic</string>
     <string name="coverage_package">Android package</string>
-    <string name="coverage_scan_system">Audit everything</string>
+    <string name="coverage_scan_system">Run device audit</string>
     <string name="coverage_scan_app">Focused app audit</string>
-    <string name="coverage_map_candidates">New map fixes</string>
-    <string name="coverage_path_candidates">New path fixes</string>
-    <string name="coverage_mount_candidates">New mount fixes</string>
-    <string name="coverage_spoof_candidates">New spoof fixes</string>
-    <string name="coverage_exact_candidates">Generated policy</string>
-    <string name="coverage_select_hint">Recommended fixes are selected automatically.</string>
+    <string name="coverage_map_candidates">Map candidates</string>
+    <string name="coverage_path_candidates">Path candidates</string>
+    <string name="coverage_mount_candidates">Mount candidates</string>
+    <string name="coverage_spoof_candidates">Spoof candidates</string>
+    <string name="coverage_exact_candidates">Available actions</string>
+    <string name="coverage_select_hint">Review each candidate before applying.</string>
     <string name="coverage_evidence_title">Runtime artifact observations</string>
     <string name="coverage_evidence_detail">This audit compares root-side observations with filesystem lookups made by a separate, unprivileged Android app when the verifier is installed. No root artifacts are automatically hidden.</string>
     <string name="coverage_evidence_empty">No matching artifacts observed in the checked locations. This does not prove an app sees a clean filesystem.</string>
@@ -398,4 +398,14 @@
     <string name="backup_restore_restored">Config restored succesfully</string>
     <string name="backup_restore_restore_fail">Fail to restore config</string>
     <string name="backup_restore_confirm">Restored UserHub scripts can run as root on the next boot. Continue only if you trust this archive.</string>
+    <string name="workspace_eyebrow">SUS’AF / DEVICE OVERVIEW</string>
+    <string name="workspace_scan_hint">Collects a new snapshot. An audit does not apply changes.</string>
+    <string name="workspace_focused">Audit a specific app</string>
+    <string name="workspace_latest">LATEST AUDIT</string>
+    <string name="workspace_completed">Audit completed</string>
+    <string name="workspace_saved">Saved audit results</string>
+    <string name="workspace_visibility">%s observed path(s) remain visible to the verifier. Completion does not mean these findings are resolved.</string>
+    <string name="workspace_unverified">App visibility is not fully verified. Review evidence before treating findings as resolved.</string>
+    <string name="workspace_advanced">Advanced diagnostics</string>
+    <string name="workspace_advanced_hint">Runtime details, kernel state, configured rules, boot stages, and migration history.</string>
 </resources>

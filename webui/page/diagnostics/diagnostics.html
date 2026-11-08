@@ -1,5 +1,6 @@
 <div class="body-content constant-height diagnostics-page">
-    <div class="box translucent diagnostics-status-card">
+    <div class="box diagnostics-status-card">
+        <span class="workspace-eyebrow" data-i18n="workspace_eyebrow"></span>
         <div class="diagnostics-status-row">
             <div class="diagnostics-status-dot" id="diagnostics-status-dot"></div>
             <div class="diagnostics-status-copy">
@@ -31,23 +32,26 @@
                 <span class="coverage-readonly" data-i18n="coverage_autopilot"></span>
             </div>
 
-            <div class="coverage-controls">
-                <md-outlined-text-field
-                    id="coverage-package"
-                    data-i18n="coverage_package"
-                    label="Android package"
-                    placeholder="com.example.detector"
-                    autocomplete="off">
-                </md-outlined-text-field>
-                <div class="coverage-scan-actions">
-                    <md-filled-button id="coverage-system-scan" data-i18n="coverage_scan_system"></md-filled-button>
+            <div class="workspace-primary-action">
+                <md-filled-button id="coverage-system-scan" data-i18n="coverage_scan_system"></md-filled-button>
+                <p data-i18n="workspace_scan_hint"></p>
+            </div>
+            <details class="workspace-disclosure workspace-focused">
+                <summary data-i18n="workspace_focused"></summary>
+                <div class="coverage-controls">
+                    <md-outlined-text-field id="coverage-package" data-i18n="coverage_package" label="Android package" placeholder="com.example.app" autocomplete="off"></md-outlined-text-field>
                     <md-filled-button id="coverage-app-scan" data-i18n="coverage_scan_app"></md-filled-button>
                 </div>
-            </div>
+            </details>
 
             <div class="coverage-message" id="coverage-message" role="status"></div>
 
             <div id="coverage-results" class="coverage-results" hidden>
+                <div class="workspace-outcome" id="workspace-outcome" role="status">
+                    <span class="workspace-eyebrow" data-i18n="workspace_latest"></span>
+                    <h3 id="workspace-outcome-title"></h3>
+                    <p id="workspace-outcome-detail"></p>
+                </div>
                 <div class="coverage-meta">
                     <strong id="coverage-result-title"></strong>
                     <span id="coverage-result-detail"></span>
@@ -81,8 +85,8 @@
                     </div>
                 </div>
 
-                <section class="coverage-evidence-section" id="coverage-evidence" hidden aria-label="Root-side observations">
-                    <h4 data-i18n="coverage_evidence_title"></h4>
+                <details class="coverage-evidence-section workspace-disclosure" id="coverage-evidence" hidden aria-label="Root-side observations">
+                    <summary data-i18n="coverage_evidence_title"></summary>
                     <p data-i18n="coverage_evidence_detail"></p>
                     <div class="coverage-scan-actions">
                         <md-filled-tonal-button id="coverage-probe-install" data-i18n="coverage_probe_install"></md-filled-tonal-button>
@@ -90,7 +94,7 @@
                     <p class="coverage-evidence-status" id="coverage-evidence-status"></p>
                     <div class="coverage-evidence-list" id="coverage-evidence-list"></div>
                     <p class="coverage-evidence-empty" id="coverage-evidence-empty" data-i18n="coverage_evidence_empty" hidden></p>
-                </section>
+                </details>
 
                 <div class="coverage-candidate-section">
                     <div class="coverage-candidate-heading">
@@ -152,6 +156,9 @@
             </div>
         </div>
 
+        <details class="workspace-advanced workspace-disclosure">
+            <summary data-i18n="workspace_advanced"></summary>
+            <p class="workspace-advanced-hint" data-i18n="workspace_advanced_hint"></p>
         <div class="box diagnostics-group">
             <h3 data-i18n="diagnostics_runtime"></h3>
             <div class="diagnostics-rows" id="diagnostics-runtime-rows"></div>
@@ -186,6 +193,8 @@
             <h3 data-i18n="diagnostics_migration_update"></h3>
             <div class="diagnostics-rows" id="diagnostics-migration-rows"></div>
         </div>
+
+        </details>
 
         <p class="diagnostics-privacy" data-i18n="diagnostics_privacy"></p>
     </div>

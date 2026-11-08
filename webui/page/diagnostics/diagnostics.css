@@ -726,3 +726,40 @@
 .coverage-evidence-empty[hidden] {
     display: none;
 }
+
+/* Audit workspace: clear hierarchy with technical details disclosed on demand. */
+.diagnostics-page { gap: 20px; --workspace-accent: #248577; }
+.diagnostics-page .box { border-radius: 20px; box-shadow: none; border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 20%, transparent); }
+.diagnostics-status-card { background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); padding: 24px; gap: 16px; }
+.workspace-eyebrow { font-size: 10px; letter-spacing: .14em; font-weight: 700; color: var(--md-sys-color-on-surface-variant); }
+.diagnostics-status-copy h2 { font-size: 24px; letter-spacing: -.04em; line-height: 1.2; }
+.diagnostics-status-dot.healthy { box-shadow: none; }
+.diagnostics-actions { grid-template-columns: 1fr 1fr; max-width: 340px; }
+.coverage-heading { padding: 24px 24px 12px; }
+.coverage-heading h3 { font-size: 21px; letter-spacing: -.03em; }
+.coverage-heading p { font-size: 13px; line-height: 1.6; }
+.coverage-readonly { display: none; }
+.workspace-primary-action { padding: 8px 24px 18px; }
+.workspace-primary-action md-filled-button { width: 100%; --md-filled-button-container-color: var(--workspace-accent); --md-filled-button-container-shape: 12px; height: 50px; }
+.workspace-primary-action p { color: var(--md-sys-color-on-surface-variant); font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
+.workspace-disclosure { border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 20%, transparent); }
+.workspace-disclosure > summary { cursor: pointer; padding: 18px 24px; font-weight: 600; font-size: 14px; }
+.workspace-disclosure > summary:focus-visible { outline: 2px solid var(--workspace-accent); outline-offset: -4px; border-radius: 8px; }
+.workspace-focused .coverage-controls { padding: 0 24px 20px; }
+.workspace-outcome { padding: 22px 24px; background: color-mix(in srgb, var(--workspace-accent) 8%, var(--md-sys-color-surface)); }
+.workspace-outcome h3 { font-size: 22px; letter-spacing: -.03em; margin: 8px 0; }
+.workspace-outcome p { margin: 0; font-size: 13px; line-height: 1.6; }
+.coverage-summary-grid { gap: 8px; padding: 16px; border: 0; }
+.coverage-summary-item { border: 0; border-radius: 12px; background: var(--md-sys-color-surface); padding: 14px 8px; }
+.coverage-summary-item strong { font-size: 25px; }
+.coverage-summary-item span { font-size: 11px; }
+.coverage-evidence-section { border-radius: 0; margin: 0; background: transparent; padding: 0 16px 12px; }
+.coverage-evidence-section > summary { padding-left: 8px; }
+.coverage-evidence-list { max-height: 360px; overflow: auto; }
+.coverage-candidate-section { padding: 20px 24px; }
+.coverage-candidate-heading { flex-wrap: wrap; gap: 8px; }
+.coverage-policy-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.workspace-advanced { width: calc(100% - 32px); max-width: 760px; border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 20%, transparent); border-radius: 20px; overflow: hidden; }
+.workspace-advanced .diagnostics-group { width: 100%; margin: 0; border-radius: 0; border-width: 1px 0 0; }
+.workspace-advanced-hint { margin: 0; padding: 0 24px 20px; font-size: 12px; line-height: 1.6; color: var(--md-sys-color-on-surface-variant); }
+@media (max-width: 480px) { .coverage-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .coverage-heading, .diagnostics-status-card { padding: 20px; } .coverage-controls { flex-wrap: wrap; } .coverage-controls md-outlined-text-field { width: 100%; min-width: 0; } }
