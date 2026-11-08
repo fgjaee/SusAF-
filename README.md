@@ -8,30 +8,26 @@
 [![KernelSU](https://img.shields.io/badge/KernelSU-000000?&logo=github&logoColor=white)](https://github.com/tiann/KernelSU)
 [![ReSukiSU](https://img.shields.io/badge/ReSukiSU-E91E63?&logo=github&logoColor=white)](https://github.com/ReSukiSU/ReSukiSU)
 
-Sus'AF began from the [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS)
-codebase, but it is now an independently maintained [KernelSU](https://kernelsu.org)
-module and WebUI with its own automatic audit engine, generated hiding policy,
-risk model, diagnostics, migration, updater, backup format, and release process.
-ReSuSFS remains credited as the upstream foundation; Sus'AF is not a renamed or
-theme-only fork.
+Sus'AF is an independently maintained [KernelSU](https://kernelsu.org) module
+and WebUI for capability-aware SuSFS/KernelSU control, runtime verification,
+diagnostics, migration, secure updating, backup/restore, and evidence-driven
+policy generation. Product behavior and development decisions are defined by
+this repository.
 
 > [!WARNING]
 > Sus'AF is currently a development build. Do not treat it as a stable daily-driver release until the prerelease checklist and device tests are complete.
 
-Current test build: **v0.1.0-dev.10**. Installation is non-interactive; there
-are no Volume Up/Down choices.
+The current branch is a development build. Installation is non-interactive;
+there are no Volume Up/Down choices.
 
-The remaining release gate is the [device smoke test](docs/DEVICE_SMOKE_TEST.md).
+See the dated [current development state](docs/CURRENT_STATE.md), the
+[roadmap](docs/ROADMAP.md), and the [device smoke test](docs/DEVICE_SMOKE_TEST.md)
+before treating a build as release-ready.
 
-Upstream changes are integrated through the documented
-[controlled merge process](docs/UPSTREAM_SYNC.md); Sus'AF is never reset or
-rebased onto ReSuSFS.
+## What Sus'AF owns
 
-## More than a ReSuSFS fork
-
-Sus'AF preserves useful ReSuSFS ancestry and the familiar WebUI model, but the
-canonical product branch is `susaf-dev` and its behavior is defined here. Its
-Sus'AF-owned layers include:
+The canonical product branch is `susaf-dev`; active behavior, policy, UI, and
+release decisions are Sus'AF-owned. Key layers include:
 
 - **Autopilot policy generation:** inventories readable running application
   processes, mapped module files, distinct mount namespaces, live
@@ -164,7 +160,12 @@ Scripts live under `/data/adb/SusAF/scripts/`. Which scripts run at which stage 
 
 ## Migration
 
-On first installation, Sus'AF safely imports understood configuration from `/data/adb/ReSuSFS` and then `/data/adb/susfs4ksu`. Existing Sus'AF values win. UserHub scripts are copied byte-for-byte with their executable modes, and their post-fs-data, boot-completed, and cron assignments remain in the same stage.
+On first installation, Sus'AF can import understood configuration from legacy
+data locations, including `/data/adb/ReSuSFS` and `/data/adb/susfs4ksu`.
+Those names exist only as migration compatibility inputs; they are not active
+Sus'AF product identity. Existing Sus'AF values win. UserHub scripts are copied
+byte-for-byte with their executable modes, and their post-fs-data,
+boot-completed, and cron assignments remain in the same stage.
 
 After the import and stage-list verification succeed, the old top-level data
 directories are moved intact into
@@ -176,7 +177,9 @@ run at once.
 
 ## CLI
 
-Every command can be run manually via `SusAF <flag>`. A `ReSuSFS` compatibility command is installed so migrated UserHub scripts continue to work.
+Every command can be run manually via `SusAF <flag>`. A temporary legacy CLI
+compatibility alias may still be installed for migrated scripts; removal of
+that alias is tracked in the roadmap.
 
 ```
   ____            _      _    _____
@@ -268,23 +271,13 @@ SusAF --coverage-verify
 SusAF --coverage-rollback
 ```
 
-## Device-validated result
+## Current validated state
 
-The 2026-09-20 reference test used the exported Sus'AF configuration and Duck
-Detector report from a Pixel 10 Pro Fold running Android 17 and kernel
-`6.6.143-g7a74b80d`. Duck reported **0 Danger, 1 Warning, 15 Ready, 0 Pending**.
-Its Mount card was clear: no suspicious mount, propagation, mount-ID, or
-namespace-consistency finding was visible, and the previously observed
-`199949` peer-group finding was absent. Kernel, Memory, Dangerous Apps, Play
-Integrity residue, SU, TEE, bootloader, and Zygisk cards were also clear.
-
-The remaining warning was `persist.sys.usb.config=adb`, which is expected when
-the user's explicit `ADB_MODE=unchanged` policy preserves USB debugging.
-Several INFO cards reported reduced or timed-out evidence paths; those are not
-positive detections and are not represented as proof of a stock device.
-
-Read the exact sanitized interpretation, active-risk notes, and coverage limits
-in the [reference device validation](docs/DEVICE_VALIDATION.md).
+The active development state changes as device testing progresses. The dated
+[current development state](docs/CURRENT_STATE.md) is the authoritative summary
+of what has been proven on-device, what remains detector-specific, and which
+behaviors are still pending implementation. Historical validation remains in
+[reference device validation](docs/DEVICE_VALIDATION.md).
 
 ## Secure SuSFS userspace updates
 
@@ -323,12 +316,11 @@ Report Sus'AF bugs and follow development in this fork:
 ## Credits
 
 - [SuSFS](https://gitlab.com/simonpunk/susfs4ksu) by simonpunk
-- [ReSuSFS](https://github.com/ahmed-alnassif/ReSuSFS) by Ahmed Al-Nassif is the upstream base
-- WebUI built on top of [bindhosts](https://github.com/bindhosts/bindhosts) by the bindhosts team
+- WebUI foundation based on [bindhosts](https://github.com/bindhosts/bindhosts) by the bindhosts team
 
 ## Author
 
-[fgjaee](https://github.com/fgjaee), with upstream ReSuSFS contributors credited in the project history
+[fgjaee](https://github.com/fgjaee). Historical ancestry remains available in Git history.
 
 ## License
 

@@ -41,8 +41,11 @@ manager, SuSFS version, tester, date, and result for every section.
   for each managed key after two boots.
 - Confirm `androidboot.verifiedbooterror` and `androidboot.verifyerrorpart` are
   absent from the generated state.
-- Compare effective uname release/version with the expected existing ReSuSFS
-  behavior, then test one explicit custom uname and restore the default.
+- Compare `uname -r`, `uname -v`, `/proc/version`, and the early
+  runtime/Zygote-visible kernel identity. A custom uname value must not be
+  marked verified when those observable surfaces disagree. Restore
+  `default/default` after the test unless a coherent identity provider is
+  available.
 
 ## Kernel umount and hiding
 
@@ -52,9 +55,10 @@ manager, SuSFS version, tester, date, and result for every section.
 - With mode `unchanged`, confirm Sus'AF does not change the feature.
 - With mode `enabled`, confirm only validated KSU/module-backed mountpoints and
   explicit entries are registered, followed by module-mounted notification.
-- Confirm Diagnostics reports early mount filter `1` and late blanket mount
-  filter `0`; targeted KernelSU umount entries remain registered after the late
-  blanket filter is released.
+- On the Android 17 validation profile, confirm Diagnostics reports early mount
+  filter `1` and late mount filter `1`. Reboot and verify that normal app and
+  `zygote_next`/isolated mount views remain consistent. Other kernels must be
+  tested explicitly rather than assuming the Android 17 result applies.
 - Confirm a migrated `/system_ext` entry remains in `kernel_umount.txt` but is
   reported as a quarantined broad target and does not enter the live kernel
   list while `ALLOW_BROAD_KERNEL_UMOUNT=0`.
@@ -83,9 +87,9 @@ manager, SuSFS version, tester, date, and result for every section.
 - Confirm generated `SUS_MAP` targets are exact existing mapped files beneath
   approved module/root-manager roots. An arbitrary out-of-scope map must be
   rejected during apply.
-- If a mount or peer/master/propagation ID exceeds the documented threshold,
-  confirm the late mount-view attempt is classified high risk and displays the
-  warning before apply.
+- Confirm large mount, peer, master, or propagation IDs are recorded only as
+  diagnostics. ID magnitude alone must not generate a hiding candidate or
+  toggle change.
 - Confirm selecting a broad mount target is the only generated path that sets
   `ALLOW_BROAD_KERNEL_UMOUNT=1`.
 - Apply a mixed selection, confirm a private checkpoint and provenance entry
@@ -97,6 +101,11 @@ manager, SuSFS version, tester, date, and result for every section.
   restored and runtime state matches them.
 - Confirm Autopilot does not edit uname, enable KPM, or change ADB while its
   mode remains `unchanged`.
+- Confirm runtime mount discovery distinguishes module-backed mounts from
+  legitimate Android/APEX mounts and records the owning source where it can be
+  established.
+- Confirm a module that creates a mount late in boot is found by the settled
+  runtime scan rather than requiring a hard-coded module name.
 - Record the third-party detector result separately from Sus'AF verification;
   use the format in [Reference device validation](DEVICE_VALIDATION.md).
 
