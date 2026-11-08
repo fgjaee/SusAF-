@@ -635,19 +635,24 @@ function renderExposureEvidence(values) {
     empty.hidden = list.childElementCount > 0;
 }
 
-function renderCoverage(values) {
+function renderCoverage(values, applyState = null) {
     if (values.schema !== '2') throw new Error('unsupported coverage schema');
     currentCoverage = values;
+    const appliedIds = applyState?.['report.epoch'] === values['generated.epoch']
+        ? new Set((applyState.ids || '').split(',').map(Number).filter(Number.isSafeInteger))
+        : new Set();
     document.getElementById('coverage-verification').hidden = true;
     // Completion describes the scan, never the effectiveness of a correction.
     const checked = values['exposure.app_visibility'] === 'checked';
     const visible = Number.parseInt(values['exposure.visible_count'] || '0', 10) || 0;
     const title = document.getElementById('workspace-outcome-title');
     const detail = document.getElementById('workspace-outcome-detail');
-    title.textContent = getString('workspace_saved');
-    detail.textContent = getString('workspace_report_time', values['generated.at'] || getString('workspace_time_unknown')) + ' · ' + (checked
-        ? getString('workspace_visibility', visible)
-        : getString('workspace_unverified'));
+    title.textContent = getString(appliedIds.size ? 'workspace_changes_saved' : 'workspace_saved');
+    detail.textContent = appliedIds.size
+        ? getString('workspace_changes_saved_detail')
+        : getString('workspace_report_time', values['generated.at'] || getString('workspace_time_unknown')) + ' · ' + (checked
+            ? getString('workspace_visibility', visible)
+            : getString('workspace_unverified'));
 
 
     const packageName = values.package || 'none';
@@ -663,11 +668,7 @@ function renderCoverage(values) {
             values['mount.namespaces'] || '0',
             values['mount.high_id_namespaces'] || '0'
         );
-    document.getElementById('coverage-map-candidates').textContent = values['candidate.sus_maps'] || '0';
-    document.getElementById('coverage-path-candidates').textContent = String(Number(values['candidate.sus_paths_loop'] || 0) + Number(values['candidate.sus_paths'] || 0));
-    document.getElementById('coverage-mount-candidates').textContent = values['candidate.kernel_umount'] || '0';
-    document.getElementById('coverage-spoof-candidates').textContent = values['candidate.spoof'] || '0';
-    document.getElementById('coverage-rollback').disabled = values['rollback.available'] !== '1';
+    document.getElementById('coverage-rollback').disabled = values['rollback.available'] !== '1' && !appliedIds.size;
     renderExposureEvidence(values);
 
     const container = document.getElementById('coverage-candidates');
@@ -675,8 +676,10 @@ function renderCoverage(values) {
     container.textContent = '';
     const candidateCount = Number.parseInt(values['candidate.count'] || '0', 10);
     let rendered = 0;
+    const remaining = { map: 0, path: 0, mount: 0, spoof: 0 };
 
     for (let id = 1; id <= candidateCount; id++) {
+        if (appliedIds.has(id)) continue;
         const path = values[`candidate.${id}.target`] || values[`candidate.${id}.path`];
         const kind = values[`candidate.${id}.kind`];
         const reason = values[`candidate.${id}.reason`];
@@ -684,6 +687,10 @@ function renderCoverage(values) {
         const action = values[`candidate.${id}.action`] || kind;
         const scope = values[`candidate.${id}.scope`] || 'device';
         if (!path || !kind) continue;
+        if (kind === 'sus_map') remaining.map++;
+        else if (kind === 'sus_path' || kind === 'sus_path_loop') remaining.path++;
+        else if (kind === 'kernel_umount') remaining.mount++;
+        else remaining.spoof++;
 
         const row = document.createElement('label');
         row.className = 'coverage-candidate';
@@ -721,10 +728,16 @@ function renderCoverage(values) {
         rendered++;
     }
 
+    document.getElementById('coverage-map-candidates').textContent = String(remaining.map);
+    document.getElementById('coverage-path-candidates').textContent = String(remaining.path);
+    document.getElementById('coverage-mount-candidates').textContent = String(remaining.mount);
+    document.getElementById('coverage-spoof-candidates').textContent = String(remaining.spoof);
     empty.hidden = rendered > 0;
     if (!rendered) {
         const probeStatus = values['exposure.probe_status'] || 'not-run';
-        empty.textContent = probeStatus === 'call-failed' || probeStatus === 'invalid-response'
+        empty.textContent = appliedIds.size
+            ? getString('workspace_actions_applied')
+            : probeStatus === 'call-failed' || probeStatus === 'invalid-response'
             ? getString('coverage_probe_blocked_actions')
             : getString('coverage_no_candidates');
     }
@@ -757,7 +770,11 @@ async function loadCoverage(scan = false, packageName = '') {
             stdout = result.stdout;
         }
 
-        renderCoverage(parseDiagnostics(stdout));
+        const values = parseDiagnostics(stdout);
+        const applied = await exec(`cat "${basePath}/state/coverage.apply.txt" 2>/dev/null`).catch(() => null);
+        if (sequence !== coverageRequestSequence) return;
+        renderCoverage(values, applied?.errno === 0 && applied.stdout.trim()
+            ? parseDiagnostics(applied.stdout) : null);
         if (scan) {
             await finishCoverageOperation('complete');
             showPrompt(getString('coverage_scan_complete'));
@@ -801,11 +818,8 @@ async function applyCoverageIds(ids) {
         + Number.parseInt(outcome['added.sus_paths'] || '0', 10)
         + Number.parseInt(outcome['added.kernel_umount'] || '0', 10)
         + Number.parseInt(outcome['changed.config'] || '0', 10);
-    showPrompt(getString('coverage_applied', added));
-    const packageName = currentCoverage?.mode === 'app' && currentCoverage.package !== 'none'
-        ? currentCoverage.package
-        : '';
-    await loadCoverage(true, packageName);
+    await loadCoverage(false);
+    setCoverageMessage(getString('coverage_applied', added));
 }
 
 async function saveCoverageSelection() {
@@ -850,7 +864,7 @@ async function rollbackCoverage() {
     setCoverageBusy(false);
     if (result.errno === 0) {
         showPrompt(getString('coverage_rollback_done'));
-        await loadCoverage(true);
+        await loadCoverage(false);
     } else {
         setCoverageMessage(getString('coverage_rollback_failed'), true);
     }
@@ -902,7 +916,7 @@ PART="$OUT.partial"
 trap 'rm -f "$PART"' EXIT HUP INT TERM
 {
   cat "$REPORT" || exit 1
-  for NAME in coverage.progress.txt coverage.audit.pid coverage.audit.launch coverage.report.txt coverage.verify.txt coverage.background.log probe.last_error.txt; do
+  for NAME in coverage.progress.txt coverage.audit.pid coverage.audit.launch coverage.report.txt coverage.apply.txt coverage.verify.txt coverage.background.log probe.last_error.txt; do
     printf '\n=== %s (saved state; last 160 lines) ===\n' "$NAME"
     if [ -r "${basePath}/state/$NAME" ]; then
       tail -n 160 "${basePath}/state/$NAME"

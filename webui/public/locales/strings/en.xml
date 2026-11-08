@@ -326,7 +326,7 @@
     <string name="coverage_scan_failed">Autopilot audit failed. Check the WebUI log or Diagnostics export.</string>
     <string name="coverage_invalid_package">Enter a full package name such as com.example.app.</string>
     <string name="coverage_apply_failed">Generated corrections could not all be applied.</string>
-    <string name="coverage_applied">Applied %s generated correction(s). Reboot for a clean namespace verification.</string>
+    <string name="coverage_applied">Saved %s correction(s). Reboot when ready; run another audit only when you choose.</string>
     <string name="coverage_verified">Verification completed. No active issues were found.</string>
     <string name="coverage_verified_stale">Verification passed. Inactive configured rules were left in place.</string>
     <string name="coverage_verify_clean">Configured policy checks passed · app visibility unverified</string>
@@ -406,6 +406,9 @@
     <string name="workspace_latest">SAVED AUDIT REPORT</string>
     <string name="workspace_completed">Audit completed</string>
     <string name="workspace_saved">Last saved audit</string>
+    <string name="workspace_changes_saved">Changes saved</string>
+    <string name="workspace_changes_saved_detail">The saved audit predates these changes. Reboot when ready, then run a new audit to check the result.</string>
+    <string name="workspace_actions_applied">All actions from this saved audit have been applied. Run a new audit when you want fresh findings.</string>
     <string name="workspace_visibility">%s observed path(s) remain visible to the verifier. Completion does not mean these findings are resolved.</string>
     <string name="workspace_unverified">App visibility is not fully verified. Review evidence before treating findings as resolved.</string>
     <string name="workspace_advanced">Advanced diagnostics</string>

@@ -152,6 +152,8 @@ grep -Fqx "$MAP_ROOT/target/lib64/exact-candidate.so" "$PERSISTENT_DIR/sus_maps.
 ! grep -Fqx '/system/etc/hosts' "$PERSISTENT_DIR/kernel_umount.txt"
 printf '%s\n' "$apply_output" | grep -Fqx 'result=applied'
 printf '%s\n' "$apply_output" | grep -Fqx 'added.sus_maps=1'
+grep -Fqx 'ids=1' "$PERSISTENT_DIR/state/coverage.apply.txt"
+grep -Fqx "report.epoch=$(sed -n 's/^generated.epoch=//p' "$STATE_DIR/coverage.report.txt")" "$PERSISTENT_DIR/state/coverage.apply.txt"
 [ -f "$TEST_ROOT/tmp/ksud" ]
 [ -f "$TEST_ROOT/apex/bin/su" ]
 checkpoint=$(printf '%s\n' "$apply_output" | sed -n 's/^checkpoint=//p')
@@ -168,6 +170,7 @@ mount_output=$(coverage_apply_ids 2)
 grep -Fqx '/system/etc/hosts' "$PERSISTENT_DIR/kernel_umount.txt"
 grep -Fqx 'ALLOW_BROAD_KERNEL_UMOUNT=0' "$PERSISTENT_DIR/config.txt"
 printf '%s\n' "$mount_output" | grep -Fqx 'added.kernel_umount=1'
+grep -Fqx 'ids=1,2' "$PERSISTENT_DIR/state/coverage.apply.txt"
 
 # A selected whole-partition target explicitly enables the broad override and
 # receives its own rollback checkpoint.
@@ -177,6 +180,7 @@ grep -Fqx 'ALLOW_BROAD_KERNEL_UMOUNT=1' "$PERSISTENT_DIR/config.txt"
 printf '%s\n' "$broad_output" | grep -Fqx 'added.kernel_umount=1'
 rollback_output=$(coverage_rollback)
 printf '%s\n' "$rollback_output" | grep -Fqx 'result=restored'
+[ ! -e "$PERSISTENT_DIR/state/coverage.apply.txt" ]
 grep -Fqx '/system/etc/hosts' "$PERSISTENT_DIR/kernel_umount.txt"
 ! grep -Fqx '/system_ext' "$PERSISTENT_DIR/kernel_umount.txt"
 grep -Fqx 'ALLOW_BROAD_KERNEL_UMOUNT=0' "$PERSISTENT_DIR/config.txt"

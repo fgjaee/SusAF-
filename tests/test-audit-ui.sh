@@ -45,6 +45,32 @@ context.exec = async command => ({errno: 0, stdout: command.includes('progress.t
         : `operation=audit\nstatus=complete\nupdated.epoch=${liveEpoch + tick}`)
     : liveReport});
 assert.equal(await vm.runInContext(`waitForCoverageBackground(1, ${liveEpoch})`, context), liveReport);
+// Applying a saved candidate must not trigger another device audit.
+const applyFn = source.slice(source.indexOf('async function applyCoverageIds('), source.indexOf('async function saveCoverageSelection('));
+const scans = [];
+const applyContext = vm.createContext({
+    moduleDirectory: '/module', setCoverageBusy: () => {}, setCoverageMessage: () => {},
+    runCoverageCommand: async () => ({errno: 0, stdout: 'result=applied\nadded.sus_maps=1'}),
+    finishCoverageOperation: async () => {},
+    parseDiagnostics: text => Object.fromEntries(text.split('\n').map(line => line.split('='))),
+    loadCoverage: async scan => scans.push(scan), getString: key => key, console,
+});
+vm.runInContext(applyFn, applyContext);
+await vm.runInContext('applyCoverageIds([1])', applyContext);
+assert.deepEqual(scans, [false], 'apply must only reload the saved report');
+let rendered = null;
+const loadFn = source.slice(source.indexOf('async function loadCoverage('), source.indexOf('async function scanAppCoverage('));
+const savedContext = vm.createContext({
+    coverageRequestSequence: 0, basePath: '/fixture', setCoverageBusy: () => {},
+    setCoverageMessage: () => {}, console,
+    exec: async command => ({errno: 0, stdout: command.includes('coverage.apply.txt')
+        ? 'schema=1\nreport.epoch=1794153157\nids=1' : liveReport}),
+    parseDiagnostics: text => Object.fromEntries(text.split('\n').map(line => line.split('='))),
+    renderCoverage: (values, applied) => { rendered = {values, applied}; },
+});
+vm.runInContext(loadFn, savedContext);
+await vm.runInContext('loadCoverage(false)', savedContext);
+assert.equal(rendered?.applied?.ids, '1', 'saved report must include applied action state');
 const xml = fs.readFileSync('webui/public/locales/strings/en.xml', 'utf8');
 for (const stage of ['exposure', 'verifying_app']) {
     assert.ok(xml.includes(`name="coverage_stage_${stage}"`), `${stage} needs its own label`);

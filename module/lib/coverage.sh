@@ -686,6 +686,35 @@ coverage_report_evidence_visible() {
 	return 1
 }
 
+coverage_mark_applied() {
+	local report="$1" ids="$2" marker="$PERSISTENT_DIR/state/coverage.apply.txt" old_ids="" old_epoch="" report_epoch token merged="" combined old_ifs temp
+	report_epoch=$(coverage_property "$report" generated.epoch 0)
+	case "$report_epoch" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$report_epoch" -gt 0 ] || return 1
+	if [ -f "$marker" ] && [ ! -L "$marker" ]; then
+		old_epoch=$(coverage_property "$marker" report.epoch 0)
+		[ "$old_epoch" != "$report_epoch" ] || old_ids=$(coverage_property "$marker" ids '')
+	fi
+	combined="${old_ids}${old_ids:+,}${ids}"
+	old_ifs=$IFS; IFS=,
+	for token in $combined; do
+		case "$token" in ''|*[!0-9]*) continue ;; esac
+		case ",$merged," in *,"$token",*) continue ;; esac
+		merged="${merged}${merged:+,}$token"
+	done
+	IFS=$old_ifs
+	[ -n "$merged" ] || return 1
+	temp="${marker}.tmp.$$"
+	{
+		coverage_put schema 1
+		coverage_put report.epoch "$report_epoch"
+		coverage_put ids "$merged"
+		coverage_put applied.epoch "$(date +%s 2>/dev/null)"
+	} > "$temp" || { rm -f "$temp"; return 1; }
+	chmod 600 "$temp" 2>/dev/null
+	mv "$temp" "$marker"
+}
+
 coverage_apply_ids() {
 	local ids="$1" report="${SUSAF_COVERAGE_REPORT:-$PERSISTENT_DIR/state/coverage.report.txt}" stamp checkpoint
 	local config_file mounts_file maps_file paths_file static_file config_temp mounts_temp maps_temp paths_temp static_temp provenance provenance_temp
@@ -754,6 +783,7 @@ coverage_apply_ids() {
 	if [ "$added_maps" -eq 0 ] && [ "$added_paths" -eq 0 ] && [ "$added_static_paths" -eq 0 ] && [ "$added_mounts" -eq 0 ] && [ "$changed_config" -eq 0 ]; then
 		trap - EXIT HUP INT TERM
 		rm -f "$config_temp" "$mounts_temp" "$maps_temp" "$paths_temp" "$static_temp" "$provenance_temp"
+		coverage_mark_applied "$report" "$selected" || true
 		coverage_progress_write complete 1 1 complete no_changes
 		coverage_put result no-changes; coverage_put duplicates "$duplicate_count"; return 0
 	fi
@@ -768,6 +798,7 @@ coverage_apply_ids() {
 	[ -f "$provenance" ] && [ ! -L "$provenance" ] && cp "$provenance" "$provenance_temp" || : > "$provenance_temp"
 	printf '%s\tids=%s\tmaps=%s\tpaths=%s\tmounts=%s\tconfig=%s\tcheckpoint=%s\tapply=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" "$selected" "$added_maps" "$added_paths" "$added_mounts" "$changed_config" "$checkpoint" "$apply_result" >> "$provenance_temp"
 	chmod 600 "$provenance_temp" 2>/dev/null; mv "$provenance_temp" "$provenance"; trap - EXIT HUP INT TERM
+	coverage_mark_applied "$report" "$selected" || true
 	coverage_put result applied; coverage_put runtime.result "$apply_result"; coverage_put added.sus_maps "$added_maps"; coverage_put added.sus_paths_loop "$added_paths"; coverage_put added.sus_paths "$added_static_paths"; coverage_put added.kernel_umount "$added_mounts"; coverage_put changed.config "$changed_config"; coverage_put checkpoint "$checkpoint"; coverage_put reboot.required 1
 	coverage_progress_write complete 1 1 complete changes_applied
 	[ "$apply_result" = ok ]
@@ -829,6 +860,7 @@ coverage_rollback() {
 	done
 	coverage_progress_write runtime 0 0 running restoring_runtime_policy
 	coverage_apply_runtime >/dev/null 2>&1 || true
+	rm -f "$PERSISTENT_DIR/state/coverage.apply.txt"
 	coverage_progress_write complete 1 1 complete rollback_complete
 	coverage_put result restored; coverage_put checkpoint "$checkpoint"; coverage_put reboot.required 1; coverage_put note runtime_rules_are_fully_cleared_on_reboot
 }
